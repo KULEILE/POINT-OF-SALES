@@ -1,0 +1,71 @@
+import React, { useState, useEffect } from 'react';
+import { productService } from '../../services/productService';
+import ProductCard from './ProductCard';
+import toast from 'react-hot-toast';
+
+const ProductGrid = ({ onAddToCart }) => {
+  const [products,   setProducts]   = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState('');
+  const [activecat,  setActivecat]  = useState('');
+  const [barcode,    setBarcode]    = useState('');
+
+  useEffect(() => {
+    productService.getCategories().then(r => setCategories(r.data.categories)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    productService.getAll({ search, category_id: activecat, limit: 120 })
+      .then(r => setProducts(r.data.products))
+      .catch(() => toast.error('Failed to load products'))
+      .finally(() => setLoading(false));
+  }, [search, activecat]);
+
+  const handleBarcode = async (e) => {
+    if (e.key === 'Enter' && barcode.trim()) {
+      try {
+        const r = await productService.getByBarcode(barcode.trim());
+        onAddToCart(r.data.product);
+        toast.success(`Added: ${r.data.product.name}`);
+        setBarcode('');
+      } catch {
+        toast.error('Product not found');
+        setBarcode('');
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full gap-3">
+      <div className="flex gap-2">
+        <input className="k-input flex-1 py-2 text-sm" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} />
+        <input className="k-input w-44 py-2 text-sm" placeholder="Scan barcode..." value={barcode} onChange={e => setBarcode(e.target.value)} onKeyDown={handleBarcode} />
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        <button onClick={() => setActivecat('')} className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-500 flex-shrink-0 transition-all ${!activecat ? 'bg-primary text-white' : 'bg-surface-card border border-surface-border text-text-muted hover:border-primary'}`}>All</button>
+        {categories.map(c => (
+          <button key={c.category_id} onClick={() => setActivecat(c.category_id)} className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-500 flex-shrink-0 transition-all ${activecat === c.category_id ? 'bg-primary text-white' : 'bg-surface-card border border-surface-border text-text-muted hover:border-primary'}`}>{c.name}</button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[...Array(12)].map((_, i) => <div key={i} className="bg-surface-card rounded-xl h-28 animate-pulse" />)}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-40 text-text-faint">
+            <p className="text-sm">No products found</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {products.map(p => <ProductCard key={p.product_id} product={p} onAdd={onAddToCart} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ProductGrid;
