@@ -5,52 +5,404 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   background-color: #0F172A;
   color: #F8FAFC;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar       { width: 5px; height: 5px; }
-::-webkit-scrollbar-track  { background: #1E293B; }
-::-webkit-scrollbar-thumb  { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #06B6D4; }
+/* ============================================================
+   RESPONSIVE TEXT SIZE
+   ============================================================ */
+@media (max-width: 640px) {
+  html { font-size: 14px; }
+}
 
-/* Reusable input */
+@media (max-width: 480px) {
+  html { font-size: 13px; }
+}
+
+/* ============================================================
+   RESPONSIVE SCROLLBAR
+   ============================================================ */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track  { background: #1E293B; }
+  ::-webkit-scrollbar-thumb  { background: #334155; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #06B6D4; }
+}
+
+/* ============================================================
+   RESPONSIVE INPUT
+   ============================================================ */
 .k-input {
-  @apply w-full bg-surface-card border border-surface-border rounded-lg px-4 py-2.5 text-sm text-text-primary placeholder-text-faint outline-none transition-all;
+  @apply w-full bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-faint outline-none transition-all;
 }
+
+@media (min-width: 640px) {
+  .k-input {
+    @apply px-4 py-2.5;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-input {
+    @apply px-4 py-3;
+  }
+}
+
 .k-input:focus { @apply border-primary ring-2 ring-primary/20; }
 
-/* Reusable buttons */
-.k-btn-primary   { @apply bg-primary hover:bg-primary-dark text-white font-semibold py-2.5 px-5 rounded-lg transition-all active:scale-95 text-sm; }
-.k-btn-accent    { @apply bg-accent hover:bg-accent-dark text-white font-semibold py-2.5 px-5 rounded-lg transition-all active:scale-95 text-sm; }
-.k-btn-danger    { @apply bg-danger hover:bg-danger-dark text-white font-semibold py-2.5 px-5 rounded-lg transition-all active:scale-95 text-sm; }
-.k-btn-outline   { @apply bg-transparent border border-surface-border hover:border-primary text-text-muted hover:text-primary font-medium py-2.5 px-5 rounded-lg transition-all text-sm; }
-.k-btn-ghost     { @apply bg-transparent hover:bg-surface-card text-text-muted hover:text-text-primary font-medium py-2 px-4 rounded-lg transition-all text-sm; }
-
-/* Card */
-.k-card { @apply bg-surface-card border border-surface-border rounded-xl p-5; }
-
-/* Table */
-.k-table         { @apply w-full text-sm; }
-.k-table thead   { @apply border-b border-surface-border; }
-
-/* FIXED LINE BELOW */
-.k-table th {
-  @apply text-left py-3 px-4 text-xs font-semibold text-text-faint uppercase tracking-wider;
+/* ============================================================
+   RESPONSIVE BUTTONS
+   ============================================================ */
+.k-btn-primary,
+.k-btn-accent,
+.k-btn-danger,
+.k-btn-outline {
+  @apply font-semibold rounded-lg transition-all active:scale-95 text-sm px-3 py-2;
 }
 
-.k-table td      { @apply py-3 px-4 text-text-muted border-b border-surface-border/50; }
-.k-table tr:last-child td { @apply border-b-0; }
-.k-table tr:hover td      { @apply bg-surface-panel; }
+@media (min-width: 640px) {
+  .k-btn-primary,
+  .k-btn-accent,
+  .k-btn-danger,
+  .k-btn-outline {
+    @apply px-5 py-2.5;
+  }
+}
 
-/* Badge */
-.k-badge-green   { @apply inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-success/10 text-success; }
-.k-badge-red     { @apply inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-danger/10 text-danger; }
-.k-badge-cyan    { @apply inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-primary/10 text-primary; }
-.k-badge-amber   { @apply inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-warning/10 text-warning; }
-.k-badge-blue    { @apply inline-block px-2 py-0.5 rounded-md text-xs font-semibold bg-accent/10 text-accent; }
+@media (min-width: 1024px) {
+  .k-btn-primary,
+  .k-btn-accent,
+  .k-btn-danger,
+  .k-btn-outline {
+    @apply px-6 py-3;
+  }
+}
+
+.k-btn-primary   { @apply bg-primary hover:bg-primary-dark text-white; }
+.k-btn-accent    { @apply bg-accent hover:bg-accent-dark text-white; }
+.k-btn-danger    { @apply bg-danger hover:bg-danger-dark text-white; }
+.k-btn-outline   { @apply bg-transparent border border-surface-border hover:border-primary text-text-muted hover:text-primary; }
+.k-btn-ghost     { @apply bg-transparent hover:bg-surface-card text-text-muted hover:text-text-primary font-medium px-3 py-1.5 rounded-lg transition-all text-sm; }
+
+@media (min-width: 640px) {
+  .k-btn-ghost { @apply px-4 py-2; }
+}
+
+/* ============================================================
+   RESPONSIVE CARD
+   ============================================================ */
+.k-card {
+  @apply bg-surface-card border border-surface-border rounded-xl p-4;
+}
+
+@media (min-width: 640px) {
+  .k-card { @apply p-5; }
+}
+
+@media (min-width: 1024px) {
+  .k-card { @apply p-6; }
+}
+
+/* ============================================================
+   RESPONSIVE TABLE
+   ============================================================ */
+.k-table { @apply w-full text-sm; }
+.k-table thead { @apply border-b border-surface-border; }
+
+.k-table th {
+  @apply text-left py-2 px-2 text-xs font-semibold text-text-faint uppercase tracking-wider;
+}
+
+@media (min-width: 640px) {
+  .k-table th {
+    @apply py-3 px-3;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-table th {
+    @apply py-3 px-4;
+  }
+}
+
+.k-table td {
+  @apply py-2 px-2 text-text-muted border-b border-surface-border/50;
+}
+
+@media (min-width: 640px) {
+  .k-table td {
+    @apply py-3 px-3;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-table td {
+    @apply py-3 px-4;
+  }
+}
+
+.k-table tr:last-child td { @apply border-b-0; }
+.k-table tr:hover td { @apply bg-surface-panel; }
+
+/* Responsive table container - horizontal scroll on mobile */
+.k-table-container {
+  @apply overflow-x-auto -mx-4 px-4;
+}
+
+@media (min-width: 768px) {
+  .k-table-container {
+    @apply overflow-x-visible mx-0 px-0;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE BADGE
+   ============================================================ */
+.k-badge-green,
+.k-badge-red,
+.k-badge-cyan,
+.k-badge-amber,
+.k-badge-blue {
+  @apply inline-block px-1.5 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap;
+}
+
+@media (min-width: 640px) {
+  .k-badge-green,
+  .k-badge-red,
+  .k-badge-cyan,
+  .k-badge-amber,
+  .k-badge-blue {
+    @apply px-2 py-0.5;
+  }
+}
+
+.k-badge-green   { @apply bg-success/10 text-success; }
+.k-badge-red     { @apply bg-danger/10 text-danger; }
+.k-badge-cyan    { @apply bg-primary/10 text-primary; }
+.k-badge-amber   { @apply bg-warning/10 text-warning; }
+.k-badge-blue    { @apply bg-accent/10 text-accent; }
+
+/* ============================================================
+   RESPONSIVE LAYOUT HELPERS
+   ============================================================ */
+
+/* Stack on mobile, row on tablet+ */
+.k-stack {
+  @apply flex flex-col gap-3;
+}
+
+@media (min-width: 768px) {
+  .k-stack {
+    @apply flex-row flex-wrap;
+  }
+}
+
+/* Full width on mobile, auto on tablet+ */
+.k-full-width-mobile {
+  @apply w-full;
+}
+
+@media (min-width: 640px) {
+  .k-full-width-mobile {
+    @apply w-auto;
+  }
+}
+
+/* Hide on mobile, show on tablet+ */
+.k-hide-mobile {
+  @apply hidden;
+}
+
+@media (min-width: 640px) {
+  .k-hide-mobile {
+    @apply block;
+  }
+}
+
+/* Show on mobile, hide on tablet+ */
+.k-show-mobile {
+  @apply block;
+}
+
+@media (min-width: 640px) {
+  .k-show-mobile {
+    @apply hidden;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE GRIDS
+   ============================================================ */
+.k-grid-2 {
+  @apply grid grid-cols-1 gap-3;
+}
+
+@media (min-width: 640px) {
+  .k-grid-2 {
+    @apply grid-cols-2 gap-4;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-grid-2 {
+    @apply grid-cols-2 gap-6;
+  }
+}
+
+.k-grid-3 {
+  @apply grid grid-cols-1 gap-3;
+}
+
+@media (min-width: 640px) {
+  .k-grid-3 {
+    @apply grid-cols-2 gap-4;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-grid-3 {
+    @apply grid-cols-3 gap-6;
+  }
+}
+
+.k-grid-4 {
+  @apply grid grid-cols-2 gap-3;
+}
+
+@media (min-width: 640px) {
+  .k-grid-4 {
+    @apply grid-cols-3 gap-4;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-grid-4 {
+    @apply grid-cols-4 gap-6;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE SIDEBAR
+   ============================================================ */
+.k-sidebar {
+  @apply fixed top-0 left-0 h-full w-64 bg-surface-bg border-r border-surface-border transform -translate-x-full transition-transform duration-300 z-50;
+}
+
+.k-sidebar.open {
+  @apply translate-x-0;
+}
+
+@media (min-width: 768px) {
+  .k-sidebar {
+    @apply relative transform-none w-64;
+  }
+}
+
+.k-overlay {
+  @apply fixed inset-0 bg-black/50 z-40;
+}
+
+@media (min-width: 768px) {
+  .k-overlay {
+    @apply hidden;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE MODAL
+   ============================================================ */
+.k-modal {
+  @apply fixed inset-0 flex items-center justify-center z-50 px-4;
+}
+
+.k-modal-content {
+  @apply bg-surface-card border border-surface-border rounded-xl p-4 max-h-[90vh] overflow-y-auto w-full max-w-md;
+}
+
+@media (min-width: 640px) {
+  .k-modal-content {
+    @apply p-6 max-w-lg;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-modal-content {
+    @apply p-8 max-w-2xl;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE DASHBOARD STATS
+   ============================================================ */
+.k-stats-grid {
+  @apply grid grid-cols-2 gap-3;
+}
+
+@media (min-width: 640px) {
+  .k-stats-grid {
+    @apply grid-cols-3 gap-4;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-stats-grid {
+    @apply grid-cols-4 gap-6;
+  }
+}
+
+.k-stat-card {
+  @apply bg-surface-card border border-surface-border rounded-xl p-4 text-center;
+}
+
+@media (min-width: 640px) {
+  .k-stat-card {
+    @apply p-5 text-left;
+  }
+}
+
+.k-stat-value {
+  @apply text-2xl font-bold text-text-primary;
+}
+
+@media (min-width: 640px) {
+  .k-stat-value {
+    @apply text-3xl;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-stat-value {
+    @apply text-4xl;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE NAVBAR
+   ============================================================ */
+.k-navbar {
+  @apply bg-surface-card border-b border-surface-border px-3 py-2 flex items-center justify-between;
+}
+
+@media (min-width: 640px) {
+  .k-navbar {
+    @apply px-4 py-3;
+  }
+}
+
+@media (min-width: 1024px) {
+  .k-navbar {
+    @apply px-6 py-4;
+  }
+}
