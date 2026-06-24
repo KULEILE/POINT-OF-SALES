@@ -1,43 +1,153 @@
 require('dotenv').config();
-const express      = require('express');
-const cors         = require('cors');
-const pool         = require('./config/db');
+const express = require('express');
+const cors = require('cors');
+const pool = require('./config/db');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
+// ============================================================
+// MIDDLEWARE
+// ============================================================
+
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
-app.use('/api/auth',      require('./routes/auth'));
-app.use('/api/products',  require('./routes/products'));
-app.use('/api/sales',     require('./routes/sales'));
-app.use('/api/customers', require('./routes/customers'));
-app.use('/api/inventory', require('./routes/inventory'));
-app.use('/api/suppliers', require('./routes/suppliers'));
-app.use('/api/reports',   require('./routes/reports'));
-app.use('/api/users',     require('./routes/users'));
-app.use('/api/audit',     require('./routes/audit'));
+// ============================================================
+// REQUEST LOGGING
+// ============================================================
 
-// Health check
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path} - ${req.ip}`);
+  next();
+});
+
+// ============================================================
+// HEALTH CHECK - Must be at the top
+// ============================================================
+
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ success: true, message: 'K-POINT OF SALES API running', db: 'connected', time: new Date() });
+    res.json({
+      success: true,
+      message: 'K-POINT OF SALES API running',
+      db: 'connected',
+      time: new Date(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development'
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Database not connected', error: err.message });
+    res.status(500).json({
+      success: false,
+      message: 'Database not connected',
+      error: err.message
+    });
   }
 });
 
-app.use((req, res) => res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` }));
+// ============================================================
+// ROUTES
+// ============================================================
+
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/products', require('./routes/products'));
+app.use('/api/sales', require('./routes/sales'));
+app.use('/api/customers', require('./routes/customers'));
+app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/reports', require('./routes/reports'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/audit', require('./routes/audit'));
+
+// ============================================================
+// ROOT ROUTE (for testing)
+// ============================================================
+
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'K-POINT OF SALES API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      products: '/api/products',
+      sales: '/api/sales',
+      customers: '/api/customers',
+      inventory: '/api/inventory',
+      suppliers: '/api/suppliers',
+      reports: '/api/reports',
+      users: '/api/users',
+      audit: '/api/audit'
+    }
+  });
+});
+
+// ============================================================
+// 404 HANDLER
+// ============================================================
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.originalUrl} not found`,
+    available_routes: [
+      '/',
+      '/api/health',
+      '/api/auth',
+      '/api/products',
+      '/api/sales',
+      '/api/customers',
+      '/api/inventory',
+      '/api/suppliers',
+      '/api/reports',
+      '/api/users',
+      '/api/audit'
+    ]
+  });
+});
+
+// ============================================================
+// ERROR HANDLER
+// ============================================================
+
 app.use(errorHandler);
 
+// ============================================================
+// START SERVER
+// ============================================================
+
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
-  console.log(`\n K-POINT OF SALES API`);
-  console.log(` Port    : ${PORT}`);
-  console.log(` API     : http://localhost:${PORT}/api`);
-  console.log(` Health  : http://localhost:${PORT}/api/health\n`);
+  console.log('\x1b[34m========================================\x1b[0m');
+  console.log('\x1b[34m  K-POINT OF SALES API\x1b[0m');
+  console.log('\x1b[34m========================================\x1b[0m');
+  console.log(`\x1b[32m Port    :\x1b[0m ${PORT}`);
+  console.log(`\x1b[32m API     :\x1b[0m http://localhost:${PORT}/api`);
+  console.log(`\x1b[32m Health  :\x1b[0m http://localhost:${PORT}/api/health`);
+  console.log(`\x1b[32m Root    :\x1b[0m http://localhost:${PORT}/`);
+  console.log('\x1b[34m========================================\x1b[0m');
+});
+
+// ============================================================
+// HANDLE UNHANDLED REJECTIONS
+// ============================================================
+
+process.on('unhandledRejection', (err) => {
+  console.log('\x1b[31m[Unhandled Rejection]\x1b[0m', err.message);
+  console.error(err.stack);
+});
+
+process.on('uncaughtException', (err) => {
+  console.log('\x1b[31m[Uncaught Exception]\x1b[0m', err.message);
+  console.error(err.stack);
+  process.exit(1);
 });
