@@ -4,7 +4,7 @@ import logo from '../../assets/logo.png';
 const Loader = ({ fullscreen = false, message = 'Loading...' }) => {
   if (fullscreen) return (
     <div className="fixed inset-0 bg-surface-bg flex flex-col items-center justify-center gap-4 z-50">
-      <img src={logo} alt="K-POINT OF SALES" className="h-12 object-contain bg-white rounded-lg px-3 py-1" />
+      <img src={logo} alt="K-POINT OF SALES" className="" />
       <div className="w-48 h-1 bg-surface-border rounded-full overflow-hidden">
         <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '60%' }} />
       </div>

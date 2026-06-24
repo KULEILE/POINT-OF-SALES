@@ -23,7 +23,7 @@ const Sidebar = ({ active, onNavigate }) => {
     <aside className="w-56 bg-surface-card border-r border-surface-border flex flex-col h-full flex-shrink-0">
       {/* Logo */}
       <div className="px-4 py-4 border-b border-surface-border">
-        <img src={logo} alt="K-POINT OF SALES" className="h-9 object-contain bg-white rounded-lg px-2 py-1 w-full" />
+        <img src={logo} alt="K-POINT OF SALES" className="" />
       </div>
 
       {/* Nav */}

@@ -4,7 +4,7 @@ import logo from '../assets/logo.png';
 const Welcome = ({ onLogin, onRegister }) => (
   <div className="min-h-screen bg-surface-bg flex flex-col items-center justify-center gap-8 p-6">
     <div className="flex flex-col items-center gap-6 w-full max-w-xs">
-      <img src={logo} alt="K-POINT OF SALES" className="h-16 object-contain bg-white rounded-xl px-4 py-2 w-full" />
+      <img src={logo} alt="K-POINT OF SALES" className="" />
       <div className="text-center">
         <h1 className="text-2xl font-800 text-text-primary tracking-tight">K-POINT OF SALES</h1>
         <p className="text-sm text-text-muted mt-1">Professional POS for Lesotho Supermarkets</p>

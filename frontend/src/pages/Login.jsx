@@ -30,7 +30,7 @@ const Login = ({ onBack, onSuccess }) => {
     <div className="min-h-screen bg-surface-bg flex">
       {/* Left panel */}
       <div className="hidden lg:flex w-5/12 bg-surface-card border-r border-surface-border flex-col justify-between p-10">
-        <img src={logo} alt="K-POINT OF SALES" className="h-10 object-contain bg-white rounded-lg px-3 py-1 self-start" />
+        <img src={logo} alt="K-POINT OF SALES" className="" />
         <div>
           <h2 className="text-3xl font-800 text-text-primary leading-tight mb-4 tracking-tight">
             Welcome back<br/>to <span className="text-primary">K-POINT</span><br/>OF SALES
@@ -44,7 +44,7 @@ const Login = ({ onBack, onSuccess }) => {
             ))}
           </div>
         </div>
-        <p className="text-xs text-text-faint">© 2025 K-POINT OF SALES · Maseru, Lesotho</p>
+        <p className="text-xs text-text-faint">© 2026 K-POINT OF SALES · Maseru, Lesotho</p>
       </div>
 
       {/* Right panel */}
