@@ -7,13 +7,45 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 // ============================================================
-// MIDDLEWARE
+// CORS CONFIGURATION - Allow multiple frontend URLs
 // ============================================================
 
+// Define allowed origins
+const allowedOrigins = [
+  'https://kpos-frontend.onrender.com',
+  'https://point-of-sales-1-5jfu.onrender.com',
+  'https://point-of-sales-1.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+
+// If FRONTEND_URL is set in .env, add it to allowed origins
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -24,7 +56,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.path} - ${req.ip}`);
+  console.log(`[${timestamp}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'unknown'}`);
   next();
 });
 
@@ -134,6 +166,7 @@ app.listen(PORT, () => {
   console.log(`\x1b[32m API     :\x1b[0m http://localhost:${PORT}/api`);
   console.log(`\x1b[32m Health  :\x1b[0m http://localhost:${PORT}/api/health`);
   console.log(`\x1b[32m Root    :\x1b[0m http://localhost:${PORT}/`);
+  console.log(`\x1b[32m CORS    :\x1b[0m Allowed origins: ${allowedOrigins.join(', ')}`);
   console.log('\x1b[34m========================================\x1b[0m');
 });
 
