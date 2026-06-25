@@ -57,10 +57,10 @@ const create = async (req, res) => {
     const change_amount = payment_method === 'cash' ? Math.max(0, (parseFloat(amount_paid) || 0) - total_amount) : 0;
     const balance_due = payment_method === 'credit' ? total_amount : 0;
 
-    // Insert transaction
+    // Insert transaction with 'PENDING' to trigger receipt generation
     const txResult = await client.query(
       `INSERT INTO transactions (receipt_number, customer_id, customer_phone, is_guest, cashier_id, cashier_name, payment_method, transaction_type, subtotal, tax_amount, tax_rate, total_amount, amount_paid, change_amount, balance_due, payment_status, status, notes)
-       VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, 15, $10, $11, $12, $13, $14, 'completed', $15) 
+       VALUES ('PENDING', $1, $2, $3, $4, $5, $6, $7, $8, $9, 15, $10, $11, $12, $13, $14, 'completed', $15) 
        RETURNING *`,
       [
         customer_id || null, 
