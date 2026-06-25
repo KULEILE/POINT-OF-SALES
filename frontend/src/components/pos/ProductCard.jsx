@@ -1,13 +1,31 @@
 import React from 'react';
+import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatters';
+import { validateProductStock } from '../../utils/validators';
 
 const ProductCard = ({ product, onAdd }) => {
   const outOfStock = product.stock_quantity <= 0;
-  const lowStock   = product.stock_quantity <= product.reorder_level && !outOfStock;
+  const lowStock = product.stock_quantity <= product.reorder_level && !outOfStock;
+
+  const handleAdd = () => {
+    if (outOfStock) {
+      toast.error(`"${product.name}" is out of stock!`);
+      return;
+    }
+
+    const stockValidation = validateProductStock(product, 1);
+    
+    if (!stockValidation.valid) {
+      toast.error(stockValidation.message);
+      return;
+    }
+
+    onAdd(product);
+  };
 
   return (
     <button
-      onClick={() => !outOfStock && onAdd(product)}
+      onClick={handleAdd}
       disabled={outOfStock}
       className={`bg-surface-card border rounded-xl p-3 text-left transition-all w-full
         ${outOfStock ? 'opacity-50 cursor-not-allowed border-surface-border' : 'border-surface-border hover:border-primary cursor-pointer active:scale-95'}`}
