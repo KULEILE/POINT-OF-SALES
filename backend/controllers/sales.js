@@ -18,7 +18,7 @@ const create = async (req, res) => {
     // Validate stock before processing
     for (const item of items) {
       const stockCheck = await client.query(
-        `SELECT quantity, name FROM products WHERE product_id = $1`,
+        `SELECT stock_quantity, name FROM products WHERE product_id = $1`,
         [item.product_id]
       );
       
@@ -30,7 +30,7 @@ const create = async (req, res) => {
         });
       }
 
-      const currentStock = parseFloat(stockCheck.rows[0].quantity) || 0;
+      const currentStock = parseFloat(stockCheck.rows[0].stock_quantity) || 0;
       const requestedQty = parseFloat(item.quantity) || 0;
       const productName = stockCheck.rows[0].name;
 
@@ -57,7 +57,7 @@ const create = async (req, res) => {
     const change_amount = payment_method === 'cash' ? Math.max(0, (parseFloat(amount_paid) || 0) - total_amount) : 0;
     const balance_due = payment_method === 'credit' ? total_amount : 0;
 
-    // Insert transaction - Use DEFAULT for receipt_number (trigger will generate it)
+    // Insert transaction
     const txResult = await client.query(
       `INSERT INTO transactions (receipt_number, customer_id, customer_phone, is_guest, cashier_id, cashier_name, payment_method, transaction_type, subtotal, tax_amount, tax_rate, total_amount, amount_paid, change_amount, balance_due, payment_status, status, notes)
        VALUES (DEFAULT, $1, $2, $3, $4, $5, $6, $7, $8, $9, 15, $10, $11, $12, $13, $14, 'completed', $15) 
@@ -82,7 +82,7 @@ const create = async (req, res) => {
     );
     const tx = txResult.rows[0];
 
-    // Insert items and update inventory
+    // Insert transaction items - stock deduction handled by database trigger
     for (const item of items) {
       await client.query(
         `INSERT INTO transaction_items (transaction_id, product_id, quantity, unit_type, unit_price, cost_at_sale, discount_applied, tax_rate, tax_exempt, total_price)
@@ -98,14 +98,6 @@ const create = async (req, res) => {
           item.tax_exempt || false, 
           (parseFloat(item.unit_price) * parseFloat(item.quantity)).toFixed(2)
         ]
-      );
-
-      // Update stock
-      await client.query(
-        `UPDATE products 
-         SET quantity = quantity - $1, updated_at = NOW() 
-         WHERE product_id = $2`,
-        [item.quantity, item.product_id]
       );
     }
 
@@ -133,7 +125,7 @@ const create = async (req, res) => {
 
     await client.query('COMMIT');
     
-    const final = await pool.query(
+    const final = await client.query(
       `SELECT * FROM transactions WHERE transaction_id = $1`,
       [tx.transaction_id]
     );
