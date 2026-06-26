@@ -122,6 +122,8 @@ const Customers = () => {
               <th>Phone</th>
               <th>Type</th>
               <th>Balance</th>
+              <th>Duration</th>
+              <th>Status</th>
               <th>Total Purchases</th>
               <th>Last Visit</th>
               <th>Actions</th>
@@ -129,34 +131,65 @@ const Customers = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-8 text-text-faint">Loading...</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-text-faint">Loading...</td></tr>
             ) : customers.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-8 text-text-faint">No customers found</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-text-faint">No customers found</td></tr>
             ) : (
-              customers.map(c => (
-                <tr key={c.customer_id}>
-                  <td className="font-500 text-text-primary">{c.full_name}</td>
-                  <td>{c.phone || '—'}</td>
-                  <td><span className="k-badge-cyan capitalize">{c.customer_type?.replace('_', ' ')}</span></td>
-                  <td className={parseFloat(c.current_balance) > 0 ? 'text-warning font-600' : 'text-text-muted'}>
-                    {formatCurrency(c.current_balance)}
-                  </td>
-                  <td>{formatCurrency(c.total_purchases)}</td>
-                  <td>{c.last_visit ? formatDate(c.last_visit) : '—'}</td>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => openEdit(c)} className="text-xs text-primary hover:underline">
-                        Edit
-                      </button>
-                      {parseFloat(c.current_balance) > 0 && (
-                        <button onClick={() => openSettlement(c)} className="text-xs text-warning hover:underline">
-                          Settle
-                        </button>
+              customers.map(c => {
+                const hasBalance = parseFloat(c.current_balance) > 0;
+                const isOverdue = c.is_overdue || false;
+                const daysRemaining = c.days_remaining !== null ? c.days_remaining : null;
+
+                return (
+                  <tr key={c.customer_id}>
+                    <td className="font-500 text-text-primary">{c.full_name}</td>
+                    <td>{c.phone || '—'}</td>
+                    <td><span className="k-badge-cyan capitalize">{c.customer_type?.replace('_', ' ')}</span></td>
+                    <td className={hasBalance ? 'text-warning font-600' : 'text-text-muted'}>
+                      {formatCurrency(c.current_balance)}
+                    </td>
+                    <td className="text-xs">
+                      {c.duration_days ? `${c.duration_days} days` : '—'}
+                      {c.due_date && (
+                        <div className="text-[10px] text-text-faint">
+                          Due: {formatDate(c.due_date)}
+                        </div>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td>
+                      {hasBalance && isOverdue && (
+                        <span className="text-xs bg-danger/10 text-danger px-2 py-0.5 rounded-full">
+                          Overdue
+                        </span>
+                      )}
+                      {hasBalance && !isOverdue && daysRemaining !== null && daysRemaining >= 0 && (
+                        <span className="text-xs bg-warning/10 text-warning px-2 py-0.5 rounded-full">
+                          {daysRemaining} days left
+                        </span>
+                      )}
+                      {!hasBalance && (
+                        <span className="text-xs bg-success/10 text-success px-2 py-0.5 rounded-full">
+                          Paid
+                        </span>
+                      )}
+                    </td>
+                    <td>{formatCurrency(c.total_purchases)}</td>
+                    <td>{c.last_visit ? formatDate(c.last_visit) : '—'}</td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openEdit(c)} className="text-xs text-primary hover:underline">
+                          Edit
+                        </button>
+                        {hasBalance && (
+                          <button onClick={() => openSettlement(c)} className="text-xs text-warning hover:underline">
+                            Settle
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

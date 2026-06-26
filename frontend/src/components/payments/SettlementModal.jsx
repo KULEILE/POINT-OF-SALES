@@ -26,6 +26,24 @@ const SettlementModal = ({ customer, onClose, onSuccess }) => {
     }
   };
 
+  // Check if credit is overdue
+  const isOverdue = (dueDate) => {
+    if (!dueDate) return false;
+    const today = new Date();
+    const due = new Date(dueDate);
+    return today > due;
+  };
+
+  // Calculate days overdue or days remaining
+  const getDaysInfo = (dueDate) => {
+    if (!dueDate) return null;
+    const today = new Date();
+    const due = new Date(dueDate);
+    const diffTime = due - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
   const handleSubmit = async () => {
     const paymentAmount = parseFloat(amount);
     if (!paymentAmount || paymentAmount <= 0) {
@@ -74,9 +92,14 @@ const SettlementModal = ({ customer, onClose, onSuccess }) => {
     }
   };
 
-  const maxAmount = paymentType === 'credit' 
+  const maxAmount = paymentType === 'credit'
     ? (customerData?.total_credit_balance || 0)
     : (selectedLayby?.balance_due || 0);
+
+  // Get credit due date info
+  const creditDueDate = customerData?.customer?.due_date;
+  const daysInfo = creditDueDate ? getDaysInfo(creditDueDate) : null;
+  const isCreditOverdue = creditDueDate ? isOverdue(creditDueDate) : false;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -128,6 +151,24 @@ const SettlementModal = ({ customer, onClose, onSuccess }) => {
                   {formatCurrency(customerData.total_credit_balance || 0)}
                 </span>
               </div>
+              {creditDueDate && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-muted">Due Date</span>
+                  <span className={`font-600 ${isCreditOverdue ? 'text-danger' : 'text-text-primary'}`}>
+                    {new Date(creditDueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {isCreditOverdue && (
+                      <span className="text-danger ml-1">
+                        (Overdue by {Math.abs(daysInfo)} days)
+                      </span>
+                    )}
+                    {!isCreditOverdue && daysInfo !== null && daysInfo >= 0 && (
+                      <span className="text-text-muted ml-1">
+                        ({daysInfo} days remaining)
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
               {customerData.open_layby_count > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Open Laybys</span>
@@ -142,28 +183,43 @@ const SettlementModal = ({ customer, onClose, onSuccess }) => {
             <div>
               <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">Select Layby</p>
               <div className="space-y-2 max-h-40 overflow-y-auto">
-                {customerData.layby_transactions.map((layby) => (
-                  <button
-                    key={layby.transaction_id}
-                    onClick={() => setSelectedLayby(layby)}
-                    className={`w-full p-3 rounded-xl border text-left transition-all ${
-                      selectedLayby?.transaction_id === layby.transaction_id
-                        ? 'border-accent bg-accent/10'
-                        : 'border-surface-border hover:border-accent/50'
-                    }`}
-                  >
-                    <div className="flex justify-between text-sm">
-                      <span className="font-600">{layby.receipt_number}</span>
-                      <span className="text-accent font-600">
-                        {formatCurrency(layby.balance_due)} remaining
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs text-text-muted mt-1">
-                      <span>Total: {formatCurrency(layby.total_amount)}</span>
-                      <span>Paid: {formatCurrency(layby.amount_paid)}</span>
-                    </div>
-                  </button>
-                ))}
+                {customerData.layby_transactions.map((layby) => {
+                  const laybyDaysInfo = layby.due_date ? getDaysInfo(layby.due_date) : null;
+                  const isLaybyOverdue = layby.due_date ? isOverdue(layby.due_date) : false;
+
+                  return (
+                    <button
+                      key={layby.transaction_id}
+                      onClick={() => setSelectedLayby(layby)}
+                      className={`w-full p-3 rounded-xl border text-left transition-all ${
+                        selectedLayby?.transaction_id === layby.transaction_id
+                          ? 'border-accent bg-accent/10'
+                          : 'border-surface-border hover:border-accent/50'
+                      }`}
+                    >
+                      <div className="flex justify-between text-sm">
+                        <span className="font-600">{layby.receipt_number}</span>
+                        <span className="text-accent font-600">
+                          {formatCurrency(layby.balance_due)} remaining
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs text-text-muted mt-1">
+                        <span>Total: {formatCurrency(layby.total_amount)}</span>
+                        <span>Paid: {formatCurrency(layby.amount_paid)}</span>
+                      </div>
+                      {layby.due_date && (
+                        <div className="flex justify-between text-xs mt-1">
+                          <span className="text-text-muted">Due: {new Date(layby.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                          {isLaybyOverdue ? (
+                            <span className="text-danger">Overdue by {Math.abs(laybyDaysInfo)} days</span>
+                          ) : (
+                            <span className="text-text-muted">{laybyDaysInfo} days remaining</span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -200,9 +256,9 @@ const SettlementModal = ({ customer, onClose, onSuccess }) => {
           {/* Payment Method */}
           <div>
             <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">Payment Method</p>
-            <select 
-              className="k-input" 
-              value={paymentMethod} 
+            <select
+              className="k-input"
+              value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
             >
               <option value="cash">Cash</option>
@@ -216,13 +272,13 @@ const SettlementModal = ({ customer, onClose, onSuccess }) => {
             onClick={handleSubmit}
             disabled={loading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmount}
             className={`k-btn-primary w-full py-3.5 text-sm font-700 ${
-              (loading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmount) 
-                ? 'opacity-50 cursor-not-allowed' 
+              (loading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmount)
+                ? 'opacity-50 cursor-not-allowed'
                 : ''
             }`}
           >
-            {loading 
-              ? 'Processing...' 
+            {loading
+              ? 'Processing...'
               : `Process ${paymentType === 'credit' ? 'Credit' : 'Layby'} Payment — ${formatCurrency(parseFloat(amount) || 0)}`
             }
           </button>

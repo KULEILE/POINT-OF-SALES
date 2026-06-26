@@ -9,6 +9,7 @@ const create = async (req, res) => {
     customer_phone,
     amount_paid,
     deposit_amount,
+    duration_days,
     notes,
   } = req.body;
 
@@ -27,11 +28,27 @@ const create = async (req, res) => {
     });
   }
 
+  // Duration validation for credit and layby
+  if ((payment_method === 'credit' || payment_method === 'layby') && !duration_days) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please enter the payment duration in days.',
+    });
+  }
+
+  const duration = parseInt(duration_days) || 30;
+  if (duration <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Duration must be greater than 0 days.',
+    });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // ── Stock validation ──
+    // Stock validation
     for (const item of items) {
       const stockCheck = await client.query(
         `SELECT stock_quantity, name FROM products WHERE product_id = $1`,
@@ -52,18 +69,18 @@ const create = async (req, res) => {
       }
     }
 
-    // ── Calculate totals ──
+    // Calculate totals
     let subtotal = 0, total_tax = 0;
     for (const item of items) {
-      const base       = parseFloat(item.unit_price) * parseFloat(item.quantity);
+      const base = parseFloat(item.unit_price) * parseFloat(item.quantity);
       const discounted = base * (1 - (parseFloat(item.discount_applied) || 0) / 100);
-      const tax        = item.tax_exempt ? 0 : discounted * (parseFloat(item.tax_rate) || 15) / 100;
-      subtotal  += discounted;
+      const tax = item.tax_exempt ? 0 : discounted * (parseFloat(item.tax_rate) || 15) / 100;
+      subtotal += discounted;
       total_tax += tax;
     }
     const total_amount = subtotal + total_tax;
 
-    // ── Credit limit validation ──
+    // Credit limit validation
     if (payment_method === 'credit' && customer_id) {
       const custCheck = await client.query(
         `SELECT full_name, credit_limit, current_balance FROM customers WHERE customer_id = $1`,
@@ -71,7 +88,7 @@ const create = async (req, res) => {
       );
       if (custCheck.rows[0]) {
         const available_credit =
-          parseFloat(custCheck.rows[0].credit_limit  || 0) -
+          parseFloat(custCheck.rows[0].credit_limit || 0) -
           parseFloat(custCheck.rows[0].current_balance || 0);
         if (total_amount > available_credit) {
           await client.query('ROLLBACK');
@@ -83,23 +100,25 @@ const create = async (req, res) => {
       }
     }
 
-    // ── Calculate amounts per payment type ──
-    const deposit      = parseFloat(deposit_amount) || 0;
+    // Calculate amounts per payment type
+    const deposit = parseFloat(deposit_amount) || 0;
     const change_amount =
       payment_method === 'cash'
         ? Math.max(0, (parseFloat(amount_paid) || 0) - total_amount)
         : 0;
-    const balance_due  =
+    const balance_due =
       payment_method === 'credit' ? total_amount
-      : payment_method === 'layby'  ? Math.max(0, total_amount - deposit)
+      : payment_method === 'layby' ? Math.max(0, total_amount - deposit)
       : 0;
-    const paid_amount  =
+    const paid_amount =
       payment_method === 'credit' ? 0
-      : payment_method === 'layby'  ? deposit
+      : payment_method === 'layby' ? deposit
       : parseFloat(amount_paid) || total_amount;
-    const pay_status   = balance_due > 0 ? 'pending' : 'paid';
+    const pay_status = balance_due > 0 ? 'pending' : 'paid';
+    const due_date = new Date();
+    due_date.setDate(due_date.getDate() + duration);
 
-    // ── Insert transaction ──
+    // Insert transaction with duration and due_date
     const txResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -107,17 +126,19 @@ const create = async (req, res) => {
         payment_method, transaction_type,
         subtotal, tax_amount, tax_rate, total_amount,
         amount_paid, change_amount, balance_due,
-        payment_status, status, notes
+        payment_status, status, notes,
+        duration_days, due_date
       ) VALUES (
         'PENDING', $1, $2, $3,
         $4, $5,
         $6, $7,
         $8, $9, 15, $10,
         $11, $12, $13,
-        $14, 'completed', $15
+        $14, 'completed', $15,
+        $16, $17
       ) RETURNING *`,
       [
-        customer_id    || null,
+        customer_id || null,
         customer_phone || null,
         !customer_id,
         req.user.user_id,
@@ -132,11 +153,13 @@ const create = async (req, res) => {
         balance_due.toFixed(2),
         pay_status,
         notes || null,
+        duration,
+        due_date.toISOString().split('T')[0],
       ]
     );
     const tx = txResult.rows[0];
 
-    // ── Insert transaction items (stock deducted by DB trigger) ──
+    // Insert transaction items (stock deducted by DB trigger)
     for (const item of items) {
       await client.query(
         `INSERT INTO transaction_items (
@@ -155,14 +178,14 @@ const create = async (req, res) => {
           item.unit_type || 'piece',
           item.unit_price,
           item.discount_applied || 0,
-          item.tax_rate         || 15,
-          item.tax_exempt       || false,
+          item.tax_rate || 15,
+          item.tax_exempt || false,
           (parseFloat(item.unit_price) * parseFloat(item.quantity)).toFixed(2),
         ]
       );
     }
 
-    // ── Handle credit sale ──
+    // Handle credit sale
     if (payment_method === 'credit' && customer_id) {
       const cust = await client.query(
         `SELECT current_balance FROM customers WHERE customer_id = $1`,
@@ -176,8 +199,16 @@ const create = async (req, res) => {
           customer_id, transaction_id, transaction_type,
           amount, previous_balance, new_balance,
           due_date, created_by
-        ) VALUES ($1, $2, 'credit_sale', $3, $4, $5, CURRENT_DATE + INTERVAL '30 days', $6)`,
-        [customer_id, tx.transaction_id, total_amount.toFixed(2), prev.toFixed(2), next.toFixed(2), req.user.user_id]
+        ) VALUES ($1, $2, 'credit_sale', $3, $4, $5, $6, $7)`,
+        [
+          customer_id,
+          tx.transaction_id,
+          total_amount.toFixed(2),
+          prev.toFixed(2),
+          next.toFixed(2),
+          due_date.toISOString().split('T')[0],
+          req.user.user_id
+        ]
       );
 
       await client.query(
@@ -186,7 +217,7 @@ const create = async (req, res) => {
       );
     }
 
-    // ── Handle lay-by sale ──
+    // Handle lay-by sale
     if (payment_method === 'layby' && customer_id) {
 
       // Record the deposit as first layby payment
@@ -235,23 +266,23 @@ const create = async (req, res) => {
 
     // Audit log
     await auditLog(pool, {
-      user_id:           req.user.user_id,
-      username:          req.user.username,
-      action_type:       'SALE',
-      action_details:    `${payment_method.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number}`,
-      affected_table:    'transactions',
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'SALE',
+      action_details: `${payment_method.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number} — Duration: ${duration} days`,
+      affected_table: 'transactions',
       affected_record_id: tx.transaction_id,
     });
 
     // Fetch final transaction with generated receipt number
-    const final = await pool.query(
+    const final = await client.query(
       `SELECT * FROM transactions WHERE transaction_id = $1`,
       [tx.transaction_id]
     );
 
     return res.status(201).json({
-      success:     true,
-      message:     'Sale processed successfully.',
+      success: true,
+      message: 'Sale processed successfully.',
       transaction: final.rows[0],
     });
 
@@ -272,15 +303,16 @@ const getAll = async (req, res) => {
     let q = `
       SELECT t.transaction_id, t.receipt_number, t.transaction_date,
              t.payment_method, t.total_amount, t.status, t.payment_status,
-             t.cashier_name, t.customer_phone, t.is_guest
+             t.cashier_name, t.customer_phone, t.is_guest,
+             t.duration_days, t.due_date
       FROM transactions t WHERE 1=1`;
     const params = [];
 
-    if (date_from)      { params.push(date_from);      q += ` AND DATE(t.transaction_date) >= $${params.length}`; }
-    if (date_to)        { params.push(date_to);        q += ` AND DATE(t.transaction_date) <= $${params.length}`; }
-    if (cashier_id)     { params.push(cashier_id);     q += ` AND t.cashier_id = $${params.length}`; }
+    if (date_from) { params.push(date_from); q += ` AND DATE(t.transaction_date) >= $${params.length}`; }
+    if (date_to) { params.push(date_to); q += ` AND DATE(t.transaction_date) <= $${params.length}`; }
+    if (cashier_id) { params.push(cashier_id); q += ` AND t.cashier_id = $${params.length}`; }
     if (payment_method) { params.push(payment_method); q += ` AND t.payment_method = $${params.length}`; }
-    if (status)         { params.push(status);         q += ` AND t.status = $${params.length}`; }
+    if (status) { params.push(status); q += ` AND t.status = $${params.length}`; }
 
     q += ` ORDER BY t.transaction_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(lim, offset);
@@ -323,15 +355,15 @@ const todaySummary = async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT
-         COUNT(*)::INT                                                                   AS transaction_count,
-         COALESCE(SUM(total_amount), 0)                                                 AS total_sales,
-         COALESCE(SUM(tax_amount), 0)                                                   AS total_tax,
-         COALESCE(AVG(total_amount), 0)                                                 AS avg_transaction,
-         COALESCE(SUM(CASE WHEN payment_method = 'cash'   THEN total_amount ELSE 0 END), 0) AS cash_sales,
-         COALESCE(SUM(CASE WHEN payment_method = 'card'   THEN total_amount ELSE 0 END), 0) AS card_sales,
+         COUNT(*)::INT AS transaction_count,
+         COALESCE(SUM(total_amount), 0) AS total_sales,
+         COALESCE(SUM(tax_amount), 0) AS total_tax,
+         COALESCE(AVG(total_amount), 0) AS avg_transaction,
+         COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END), 0) AS cash_sales,
+         COALESCE(SUM(CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END), 0) AS card_sales,
          COALESCE(SUM(CASE WHEN payment_method = 'mobile' THEN total_amount ELSE 0 END), 0) AS mobile_sales,
          COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN total_amount ELSE 0 END), 0) AS credit_sales,
-         COALESCE(SUM(CASE WHEN payment_method = 'layby'  THEN total_amount ELSE 0 END), 0) AS layby_sales
+         COALESCE(SUM(CASE WHEN payment_method = 'layby' THEN total_amount ELSE 0 END), 0) AS layby_sales
        FROM transactions
        WHERE DATE(transaction_date) = CURRENT_DATE AND status = 'completed'`
     );

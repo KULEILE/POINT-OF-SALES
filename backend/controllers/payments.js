@@ -1,6 +1,24 @@
 const pool = require('../config/db');
 const { auditLog } = require('../utils/helpers');
 
+// Helper function to check if a transaction is overdue
+const isOverdue = (dueDate) => {
+  if (!dueDate) return false;
+  const today = new Date();
+  const due = new Date(dueDate);
+  return today > due;
+};
+
+// Helper function to get days remaining or overdue
+const getDaysInfo = (dueDate) => {
+  if (!dueDate) return null;
+  const today = new Date();
+  const due = new Date(dueDate);
+  const diffTime = due - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
 const processCreditPayment = async (req, res) => {
   const { customer_id, amount, payment_method, notes } = req.body;
 
@@ -17,8 +35,16 @@ const processCreditPayment = async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // Get customer with credit balance and due date
     const customerResult = await client.query(
-      `SELECT full_name, current_balance, phone FROM customers WHERE customer_id = $1`,
+      `SELECT c.full_name, c.current_balance, c.phone, 
+              t.due_date, t.transaction_id, t.balance_due
+       FROM customers c
+       LEFT JOIN transactions t ON t.customer_id = c.customer_id 
+         AND t.payment_method = 'credit' 
+         AND t.payment_status = 'pending'
+       WHERE c.customer_id = $1
+       ORDER BY t.transaction_date DESC LIMIT 1`,
       [customer_id]
     );
 
@@ -40,6 +66,14 @@ const processCreditPayment = async (req, res) => {
 
     const newBalance = currentBalance - paymentAmount;
 
+    // Check if overdue
+    const overdueStatus = isOverdue(customer.due_date);
+    const daysInfo = getDaysInfo(customer.due_date);
+
+    if (overdueStatus) {
+      console.log(`[PAYMENT] Customer ${customer.full_name} is overdue by ${Math.abs(daysInfo)} days`);
+    }
+
     const counterResult = await client.query(
       `INSERT INTO receipt_counter (counter_date, last_number)
        VALUES (CURRENT_DATE, 1)
@@ -53,7 +87,6 @@ const processCreditPayment = async (req, res) => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const receiptNumber = 'KPOS-' + dateStr + '-' + String(counter).padStart(4, '0') + '-PAY';
 
-    // Use 'credit' instead of 'payment' to match enum
     const txResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -106,6 +139,16 @@ const processCreditPayment = async (req, res) => {
       [newBalance.toFixed(2), customer_id]
     );
 
+    // If fully paid, update transaction status
+    if (newBalance <= 0) {
+      await client.query(
+        `UPDATE transactions 
+         SET payment_status = 'paid', updated_at = NOW()
+         WHERE customer_id = $1 AND payment_method = 'credit' AND payment_status = 'pending'`,
+        [customer_id]
+      );
+    }
+
     await client.query('COMMIT');
 
     await auditLog(pool, {
@@ -127,7 +170,9 @@ const processCreditPayment = async (req, res) => {
       message: 'Credit payment processed successfully.',
       transaction: final.rows[0],
       new_balance: newBalance,
-      customer: customer
+      customer: customer,
+      overdue_status: overdueStatus,
+      days_info: daysInfo
     });
 
   } catch (err) {
@@ -165,15 +210,23 @@ const processLaybyPayment = async (req, res) => {
 
     if (!txResult.rows[0]) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Layby transaction not found or already completed.' 
+      return res.status(404).json({
+        success: false,
+        message: 'Layby transaction not found or already completed.'
       });
     }
 
     const tx = txResult.rows[0];
     const balanceDue = parseFloat(tx.balance_due) || 0;
     const amountPaid = parseFloat(tx.amount_paid) || 0;
+
+    // Check if overdue
+    const overdueStatus = isOverdue(tx.due_date);
+    const daysInfo = getDaysInfo(tx.due_date);
+
+    if (overdueStatus) {
+      console.log(`[PAYMENT] Layby ${tx.receipt_number} is overdue by ${Math.abs(daysInfo)} days`);
+    }
 
     if (paymentAmount > balanceDue) {
       await client.query('ROLLBACK');
@@ -228,7 +281,6 @@ const processLaybyPayment = async (req, res) => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const receiptNumber = 'KPOS-' + dateStr + '-' + String(counter).padStart(4, '0') + '-LBY';
 
-    // Use 'layby' instead of 'layby_payment' to match enum
     const paymentTxResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -295,7 +347,9 @@ const processLaybyPayment = async (req, res) => {
       payment_transaction: paymentTx,
       is_fully_paid: isFullyPaid,
       remaining_balance: Math.max(0, newBalanceDue),
-      customer: tx
+      customer: tx,
+      overdue_status: overdueStatus,
+      days_info: daysInfo
     });
 
   } catch (err) {
@@ -321,8 +375,9 @@ const getCustomerPayments = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
     }
 
+    // Get credit transactions with due date
     const creditPayments = await pool.query(
-      `SELECT ct.*, t.receipt_number, t.transaction_date 
+      `SELECT ct.*, t.receipt_number, t.transaction_date, t.due_date, t.duration_days
        FROM credit_transactions ct
        JOIN transactions t ON ct.transaction_id = t.transaction_id
        WHERE ct.customer_id = $1 AND ct.transaction_type = 'payment'
@@ -331,9 +386,12 @@ const getCustomerPayments = async (req, res) => {
       [customerId]
     );
 
+    // Get open layby transactions with due date and days remaining
     const laybyTransactions = await pool.query(
       `SELECT t.transaction_id, t.receipt_number, t.transaction_date, 
-              t.total_amount, t.amount_paid, t.balance_due, t.payment_status
+              t.total_amount, t.amount_paid, t.balance_due, t.payment_status,
+              t.due_date, t.duration_days,
+              (CURRENT_DATE - t.due_date) AS days_overdue
        FROM transactions t
        WHERE t.customer_id = $1 AND t.payment_method = 'layby' AND t.payment_status = 'pending'
        ORDER BY t.transaction_date DESC`,
@@ -350,11 +408,31 @@ const getCustomerPayments = async (req, res) => {
       [customerId]
     );
 
+    // Get credit due date from latest credit transaction
+    const creditDueDate = await pool.query(
+      `SELECT due_date, duration_days 
+       FROM transactions 
+       WHERE customer_id = $1 AND payment_method = 'credit' AND payment_status = 'pending'
+       ORDER BY transaction_date DESC
+       LIMIT 1`,
+      [customerId]
+    );
+
     return res.json({
       success: true,
-      customer: customerResult.rows[0],
+      customer: {
+        ...customerResult.rows[0],
+        due_date: creditDueDate.rows[0]?.due_date || null,
+        duration_days: creditDueDate.rows[0]?.duration_days || null,
+        is_overdue: creditDueDate.rows[0]?.due_date ? isOverdue(creditDueDate.rows[0].due_date) : false,
+        days_remaining: creditDueDate.rows[0]?.due_date ? getDaysInfo(creditDueDate.rows[0].due_date) : null
+      },
       credit_payments: creditPayments.rows,
-      layby_transactions: laybyTransactions.rows,
+      layby_transactions: laybyTransactions.rows.map(l => ({
+        ...l,
+        is_overdue: l.due_date ? isOverdue(l.due_date) : false,
+        days_remaining: l.due_date ? getDaysInfo(l.due_date) : null
+      })),
       layby_payments: laybyPayments.rows,
       total_credit_balance: parseFloat(customerResult.rows[0].current_balance) || 0,
       open_layby_count: laybyTransactions.rows.length
@@ -373,6 +451,7 @@ const getCustomerLaybys = async (req, res) => {
     const result = await pool.query(
       `SELECT t.transaction_id, t.receipt_number, t.transaction_date, 
               t.total_amount, t.amount_paid, t.balance_due, t.payment_status,
+              t.due_date, t.duration_days,
               (SELECT COUNT(*) FROM layby_payments lp WHERE lp.transaction_id = t.transaction_id) AS payment_count
        FROM transactions t
        WHERE t.customer_id = $1 AND t.payment_method = 'layby'
@@ -382,7 +461,11 @@ const getCustomerLaybys = async (req, res) => {
 
     return res.json({
       success: true,
-      laybys: result.rows
+      laybys: result.rows.map(l => ({
+        ...l,
+        is_overdue: l.due_date ? isOverdue(l.due_date) : false,
+        days_remaining: l.due_date ? getDaysInfo(l.due_date) : null
+      }))
     });
 
   } catch (err) {

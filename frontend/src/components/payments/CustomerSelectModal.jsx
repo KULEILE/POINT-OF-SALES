@@ -63,27 +63,47 @@ const CustomerSelectModal = ({ onSelect, onClose }) => {
             </div>
           ) : (
             <div className="space-y-2">
-              {customers.map((customer) => (
-                <button
-                  key={customer.customer_id}
-                  onClick={() => handleSelect(customer)}
-                  className="w-full p-3 rounded-xl border border-surface-border hover:border-primary transition-all text-left"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-600 text-text-primary">{customer.full_name}</p>
-                      <p className="text-xs text-text-muted">{customer.phone || 'No phone'}</p>
-                      <p className="text-xs text-text-muted capitalize">{customer.customer_type?.replace('_', ' ')}</p>
+              {customers.map((customer) => {
+                const hasBalance = parseFloat(customer.current_balance) > 0;
+                const isOverdue = customer.is_overdue || false;
+                const daysRemaining = customer.days_remaining !== null ? customer.days_remaining : null;
+
+                return (
+                  <button
+                    key={customer.customer_id}
+                    onClick={() => handleSelect(customer)}
+                    className="w-full p-3 rounded-xl border border-surface-border hover:border-primary transition-all text-left"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-600 text-text-primary">{customer.full_name}</p>
+                        <p className="text-xs text-text-muted">{customer.phone || 'No phone'}</p>
+                        <p className="text-xs text-text-muted capitalize">{customer.customer_type?.replace('_', ' ')}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-sm font-600 ${hasBalance ? 'text-warning' : 'text-success'}`}>
+                          {formatCurrency(customer.current_balance || 0)}
+                        </p>
+                        <p className="text-xs text-text-faint">Balance</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-600 ${parseFloat(customer.current_balance) > 0 ? 'text-warning' : 'text-success'}`}>
-                        {formatCurrency(customer.current_balance || 0)}
-                      </p>
-                      <p className="text-xs text-text-faint">Balance</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
+                    {hasBalance && isOverdue && (
+                      <div className="mt-1">
+                        <span className="text-xs bg-danger/10 text-danger px-2 py-0.5 rounded-full">
+                          Overdue
+                        </span>
+                      </div>
+                    )}
+                    {hasBalance && !isOverdue && daysRemaining !== null && daysRemaining >= 0 && (
+                      <div className="mt-1">
+                        <span className="text-xs bg-warning/10 text-warning px-2 py-0.5 rounded-full">
+                          {daysRemaining} days remaining
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
