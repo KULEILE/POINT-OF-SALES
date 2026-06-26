@@ -17,7 +17,6 @@ const processCreditPayment = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Get customer current balance
     const customerResult = await client.query(
       `SELECT full_name, current_balance, phone FROM customers WHERE customer_id = $1`,
       [customer_id]
@@ -41,7 +40,6 @@ const processCreditPayment = async (req, res) => {
 
     const newBalance = currentBalance - paymentAmount;
 
-    // Generate receipt number
     const counterResult = await client.query(
       `INSERT INTO receipt_counter (counter_date, last_number)
        VALUES (CURRENT_DATE, 1)
@@ -55,7 +53,7 @@ const processCreditPayment = async (req, res) => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const receiptNumber = 'KPOS-' + dateStr + '-' + String(counter).padStart(4, '0') + '-PAY';
 
-    // Insert credit payment transaction
+    // Use 'credit' instead of 'payment' to match enum
     const txResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -67,7 +65,7 @@ const processCreditPayment = async (req, res) => {
       ) VALUES (
         $1, $2, $3, false,
         $4, $5,
-        $6, 'payment',
+        $6, 'credit',
         0, 0, 0, $7,
         $8, 0, 0,
         'paid', 'completed', $9
@@ -87,7 +85,6 @@ const processCreditPayment = async (req, res) => {
 
     const tx = txResult.rows[0];
 
-    // Record in credit_transactions
     await client.query(
       `INSERT INTO credit_transactions (
         customer_id, transaction_id, transaction_type,
@@ -104,7 +101,6 @@ const processCreditPayment = async (req, res) => {
       ]
     );
 
-    // Update customer balance
     await client.query(
       `UPDATE customers SET current_balance = $1, updated_at = NOW() WHERE customer_id = $2`,
       [newBalance.toFixed(2), customer_id]
@@ -112,7 +108,6 @@ const processCreditPayment = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Audit log
     await auditLog(pool, {
       user_id: req.user.user_id,
       username: req.user.username,
@@ -160,7 +155,6 @@ const processLaybyPayment = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Get the layby transaction
     const txResult = await client.query(
       `SELECT t.*, c.full_name, c.phone, c.customer_id 
        FROM transactions t
@@ -193,7 +187,6 @@ const processLaybyPayment = async (req, res) => {
     const newAmountPaid = amountPaid + paymentAmount;
     const isFullyPaid = newBalanceDue <= 0;
 
-    // Record layby payment
     await client.query(
       `INSERT INTO layby_payments (
         transaction_id, amount_paid, payment_method,
@@ -210,7 +203,6 @@ const processLaybyPayment = async (req, res) => {
       ]
     );
 
-    // Update transaction
     await client.query(
       `UPDATE transactions 
        SET balance_due = $1, amount_paid = $2, payment_status = $3, updated_at = NOW()
@@ -223,7 +215,6 @@ const processLaybyPayment = async (req, res) => {
       ]
     );
 
-    // Generate receipt number for payment
     const counterResult = await client.query(
       `INSERT INTO receipt_counter (counter_date, last_number)
        VALUES (CURRENT_DATE, 1)
@@ -237,7 +228,7 @@ const processLaybyPayment = async (req, res) => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const receiptNumber = 'KPOS-' + dateStr + '-' + String(counter).padStart(4, '0') + '-LBY';
 
-    // Insert payment transaction record
+    // Use 'layby' instead of 'layby_payment' to match enum
     const paymentTxResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -249,7 +240,7 @@ const processLaybyPayment = async (req, res) => {
       ) VALUES (
         $1, $2, $3, false,
         $4, $5,
-        $6, 'layby_payment',
+        $6, 'layby',
         0, 0, 0, $7,
         $8, 0, 0,
         'paid', 'completed', $9
@@ -269,7 +260,6 @@ const processLaybyPayment = async (req, res) => {
 
     const paymentTx = paymentTxResult.rows[0];
 
-    // Update customer balance (reduce by payment amount)
     const customerResult = await client.query(
       `SELECT current_balance FROM customers WHERE customer_id = $1`,
       [tx.customer_id]
@@ -284,7 +274,6 @@ const processLaybyPayment = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Audit log
     await auditLog(pool, {
       user_id: req.user.user_id,
       username: req.user.username,
@@ -322,7 +311,6 @@ const getCustomerPayments = async (req, res) => {
   try {
     const customerId = req.params.id;
 
-    // Get customer details with balance
     const customerResult = await pool.query(
       `SELECT customer_id, full_name, phone, current_balance, credit_limit 
        FROM customers WHERE customer_id = $1`,
@@ -333,7 +321,6 @@ const getCustomerPayments = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
     }
 
-    // Get credit payment history
     const creditPayments = await pool.query(
       `SELECT ct.*, t.receipt_number, t.transaction_date 
        FROM credit_transactions ct
@@ -344,7 +331,6 @@ const getCustomerPayments = async (req, res) => {
       [customerId]
     );
 
-    // Get layby transactions with remaining balances
     const laybyTransactions = await pool.query(
       `SELECT t.transaction_id, t.receipt_number, t.transaction_date, 
               t.total_amount, t.amount_paid, t.balance_due, t.payment_status
@@ -354,7 +340,6 @@ const getCustomerPayments = async (req, res) => {
       [customerId]
     );
 
-    // Get layby payment history
     const laybyPayments = await pool.query(
       `SELECT lp.*, t.receipt_number 
        FROM layby_payments lp

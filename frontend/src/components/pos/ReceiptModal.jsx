@@ -126,7 +126,9 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
             <div className="border-t border-dashed border-surface-border my-2" />
 
             <p className="text-center text-text-faint text-[10px]">
-              {isPaymentReceipt ? 'Thank you for your payment!' : 'Thank you for your business!'}
+              {isCreditPayment ? 'Thank you for settling your credit account.' : 
+               isLaybyPayment ? 'Thank you for paying your layby.' : 
+               'Thank you for shopping with us!'}
             </p>
             {transaction?.notes && (
               <p className="text-center text-text-faint text-[9px]">Note: {transaction.notes}</p>
