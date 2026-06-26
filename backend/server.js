@@ -10,7 +10,6 @@ const app = express();
 // CORS CONFIGURATION - Allow multiple frontend URLs
 // ============================================================
 
-// Define allowed origins
 const allowedOrigins = [
   'https://kpos-frontend.onrender.com',
   'https://point-of-sales-1-5jfu.onrender.com',
@@ -19,14 +18,12 @@ const allowedOrigins = [
   'http://localhost:5173'
 ];
 
-// If FRONTEND_URL is set in .env, add it to allowed origins
 if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
       return callback(null, true);
     }
@@ -61,7 +58,7 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// HEALTH CHECK - Must be at the top
+// HEALTH CHECK
 // ============================================================
 
 app.get('/api/health', async (req, res) => {
@@ -92,6 +89,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/sales', require('./routes/sales'));
 app.use('/api/customers', require('./routes/customers'));
+app.use('/api/payments', require('./routes/payments'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/reports', require('./routes/reports'));
@@ -99,7 +97,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
 
 // ============================================================
-// ROOT ROUTE (for testing)
+// ROOT ROUTE
 // ============================================================
 
 app.get('/', (req, res) => {
@@ -113,6 +111,7 @@ app.get('/', (req, res) => {
       products: '/api/products',
       sales: '/api/sales',
       customers: '/api/customers',
+      payments: '/api/payments',
       inventory: '/api/inventory',
       suppliers: '/api/suppliers',
       reports: '/api/reports',
@@ -137,6 +136,7 @@ app.use((req, res) => {
       '/api/products',
       '/api/sales',
       '/api/customers',
+      '/api/payments',
       '/api/inventory',
       '/api/suppliers',
       '/api/reports',
