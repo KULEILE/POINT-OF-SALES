@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { reportService } from '../services/reportService';
 import { productService } from '../services/productService';
 import { inventoryService } from '../services/inventoryService';
-import { formatCurrency, formatDateTime } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 import { useAuth } from '../context/AuthContext';
 
 const StatCard = ({ label, value, sub, color = 'text-primary' }) => (
@@ -43,8 +43,11 @@ const Dashboard = () => {
     );
   }
 
-  const hasExpired = expiredProducts.length > 0;
-  const hasLowStock = lowStock.filter(p => p.alert_status !== 'EXPIRED').length > 0;
+  // Filter products that are truly low stock (not expired, not ok)
+  const lowStockProducts = lowStock.filter(p => p.alert_status === 'LOW STOCK' || p.alert_status === 'OUT OF STOCK');
+  const expiredProductsList = expiredProducts || [];
+  const hasExpired = expiredProductsList.length > 0;
+  const hasLowStock = lowStockProducts.length > 0;
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
@@ -57,50 +60,71 @@ const Dashboard = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Today Sales" value={formatCurrency(summary?.today?.total || 0)} sub={`${summary?.today?.count || 0} transactions`} />
-        <StatCard label="This Week" value={formatCurrency(summary?.week?.total || 0)} sub={`${summary?.week?.count || 0} transactions`} color="text-accent" />
-        <StatCard label="This Month" value={formatCurrency(summary?.month?.total || 0)} sub={`${summary?.month?.count || 0} transactions`} color="text-accent" />
-        <StatCard label="Low Stock" value={summary?.low_stock_count || 0} sub="products need reorder" color={summary?.low_stock_count > 0 ? 'text-warning' : 'text-success'} />
+        <StatCard 
+          label="Today Sales" 
+          value={formatCurrency(summary?.today?.total || 0)} 
+          sub={`${summary?.today?.count || 0} transactions`} 
+        />
+        <StatCard 
+          label="This Week" 
+          value={formatCurrency(summary?.week?.total || 0)} 
+          sub={`${summary?.week?.count || 0} transactions`} 
+          color="text-accent" 
+        />
+        <StatCard 
+          label="This Month" 
+          value={formatCurrency(summary?.month?.total || 0)} 
+          sub={`${summary?.month?.count || 0} transactions`} 
+          color="text-accent" 
+        />
+        <StatCard 
+          label="Low Stock" 
+          value={lowStockProducts.length} 
+          sub="products need reorder" 
+          color={lowStockProducts.length > 0 ? 'text-warning' : 'text-success'} 
+        />
       </div>
 
-      {/* Alerts */}
+      {/* Alerts Section - Only shows when there are alerts */}
       {(hasExpired || hasLowStock) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Expired Products Alert */}
           {hasExpired && (
             <div className="k-card border-danger/30 bg-danger/5">
               <h3 className="text-sm font-700 text-danger mb-2">Expired Products Alert</h3>
               <p className="text-sm text-text-muted">
-                {expiredProducts.length} product(s) have expired and need to be removed from stock.
+                {expiredProductsList.length} product(s) have expired and need to be removed from stock.
               </p>
               <ul className="mt-2 space-y-1">
-                {expiredProducts.slice(0, 3).map(p => (
+                {expiredProductsList.slice(0, 3).map(p => (
                   <li key={p.product_id} className="text-sm flex justify-between">
                     <span>{p.name}</span>
                     <span className="text-danger font-600">{p.stock_quantity} units expired</span>
                   </li>
                 ))}
-                {expiredProducts.length > 3 && (
-                  <li className="text-sm text-text-faint">+{expiredProducts.length - 3} more expired products</li>
+                {expiredProductsList.length > 3 && (
+                  <li className="text-sm text-text-faint">+{expiredProductsList.length - 3} more expired products</li>
                 )}
               </ul>
             </div>
           )}
 
+          {/* Low Stock Alert */}
           {hasLowStock && (
             <div className="k-card border-warning/30 bg-warning/5">
               <h3 className="text-sm font-700 text-warning mb-2">Low Stock Alert</h3>
               <p className="text-sm text-text-muted">
-                {lowStock.filter(p => p.alert_status !== 'EXPIRED').length} product(s) are running low.
+                {lowStockProducts.length} product(s) are running low.
               </p>
               <ul className="mt-2 space-y-1">
-                {lowStock.filter(p => p.alert_status !== 'EXPIRED').slice(0, 3).map(p => (
+                {lowStockProducts.slice(0, 3).map(p => (
                   <li key={p.product_id} className="text-sm flex justify-between">
                     <span>{p.name}</span>
                     <span className="text-warning font-600">{p.stock_quantity} units left</span>
                   </li>
                 ))}
-                {lowStock.filter(p => p.alert_status !== 'EXPIRED').length > 3 && (
-                  <li className="text-sm text-text-faint">+{lowStock.filter(p => p.alert_status !== 'EXPIRED').length - 3} more low stock items</li>
+                {lowStockProducts.length > 3 && (
+                  <li className="text-sm text-text-faint">+{lowStockProducts.length - 3} more low stock items</li>
                 )}
               </ul>
             </div>
@@ -109,7 +133,7 @@ const Dashboard = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top products */}
+        {/* Top Selling Products */}
         <div className="k-card">
           <h3 className="text-sm font-700 text-text-primary mb-4">Top Selling Products</h3>
           {topProds.length === 0 ? (
@@ -132,23 +156,23 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Low stock */}
+        {/* Low Stock Alerts - Bottom Section */}
         <div className="k-card">
           <h3 className="text-sm font-700 text-text-primary mb-4">Low Stock Alerts</h3>
-          {lowStock.length === 0 ? (
+          {lowStockProducts.length === 0 ? (
             <p className="text-sm text-success">All stock levels are healthy</p>
           ) : (
             <div className="space-y-3">
-              {lowStock.slice(0, 5).map(p => (
+              {lowStockProducts.slice(0, 5).map(p => (
                 <div key={p.product_id} className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-500 text-text-primary">{p.name}</p>
                     <p className="text-xs text-text-muted">
-                      {p.alert_status === 'EXPIRED' ? 'Expired' : `Min stock: ${p.min_stock || 5}`}
+                      Min stock: {p.min_stock || 5}
                     </p>
                   </div>
-                  <span className={`text-xs font-700 ${p.alert_status === 'EXPIRED' ? 'text-danger' : p.stock_quantity <= 0 ? 'text-danger' : 'text-warning'}`}>
-                    {p.alert_status === 'EXPIRED' ? 'EXPIRED' : p.stock_quantity <= 0 ? 'OUT' : `${p.stock_quantity} left`}
+                  <span className="text-xs font-700 text-warning">
+                    {p.stock_quantity <= 0 ? 'OUT OF STOCK' : `${p.stock_quantity} left`}
                   </span>
                 </div>
               ))}

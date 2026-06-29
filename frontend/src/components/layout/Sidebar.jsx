@@ -1,23 +1,29 @@
 import React from 'react';
-import logo from '../../assets/logo.png';
 import { useAuth } from '../../context/AuthContext';
+import logo from '../../assets/logo.png';
 
+// Define navigation with role requirements
 const allNav = [
-  { key: 'dashboard',  label: 'Dashboard',       roles: ['admin','manager','cashier','auditor'] },
-  { key: 'pos',        label: 'Point of Sale',    roles: ['admin','manager','cashier'] },
-  { key: 'products',   label: 'Products',         roles: ['admin','manager'] },
-  { key: 'inventory',  label: 'Inventory',        roles: ['admin','manager'] },
-  { key: 'customers',  label: 'Customers',        roles: ['admin','manager','cashier'] },
-  { key: 'suppliers',  label: 'Suppliers',        roles: ['admin','manager'] },
-  { key: 'reports',    label: 'Reports',          roles: ['admin','manager','auditor'] },
-  { key: 'users',      label: 'User Management',  roles: ['admin'] },
-  { key: 'audit',      label: 'Audit Trail',      roles: ['admin','manager','auditor'] },
-  { key: 'settings',   label: 'Settings',         roles: ['admin'] },
+  { key: 'dashboard', label: 'Dashboard', roles: ['admin', 'manager'] },
+  { key: 'pos', label: 'Point of Sale', roles: ['admin', 'manager', 'cashier'] },
+  { key: 'products', label: 'Products', roles: ['admin', 'manager', 'cashier'] },
+  { key: 'inventory', label: 'Inventory', roles: ['admin', 'manager'] },
+  { key: 'customers', label: 'Customers', roles: ['admin', 'manager', 'cashier'] },
+  { key: 'suppliers', label: 'Suppliers', roles: ['admin', 'manager'] },
+  { key: 'reports', label: 'Reports', roles: ['admin', 'manager', 'auditor'] },
+  { key: 'users', label: 'User Management', roles: ['admin'] },
+  { key: 'audit', label: 'Audit Trail', roles: ['admin', 'manager', 'auditor'] },
+  { key: 'settings', label: 'Settings', roles: ['admin'] },
 ];
 
 const Sidebar = ({ active, onNavigate }) => {
   const { user } = useAuth();
-  const nav = allNav.filter(n => n.roles.includes(user?.role));
+
+  // Filter navigation items based on user role
+  const nav = allNav.filter(item => {
+    if (!user) return false;
+    return item.roles.includes(user.role);
+  });
 
   return (
     <aside className="w-56 bg-surface-card border-r border-surface-border flex flex-col h-full flex-shrink-0">
@@ -45,7 +51,7 @@ const Sidebar = ({ active, onNavigate }) => {
         </div>
       </nav>
 
-      {/* User */}
+      {/* User Info */}
       <div className="px-4 py-3 border-t border-surface-border">
         <p className="text-xs font-600 text-text-primary truncate">{user?.full_name}</p>
         <p className="text-xs text-primary capitalize mt-0.5">{user?.role}</p>
