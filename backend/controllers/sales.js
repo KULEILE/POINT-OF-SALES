@@ -48,23 +48,40 @@ const create = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Stock validation
+    // Stock validation and expiry check
     for (const item of items) {
       const stockCheck = await client.query(
-        `SELECT stock_quantity, name FROM products WHERE product_id = $1`,
+        `SELECT stock_quantity, name, expiry_date FROM products WHERE product_id = $1`,
         [item.product_id]
       );
       if (!stockCheck.rows[0]) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: `Product not found: ${item.product_id}` });
       }
-      const available = parseFloat(stockCheck.rows[0].stock_quantity) || 0;
+      
+      const product = stockCheck.rows[0];
+      const available = parseFloat(product.stock_quantity) || 0;
       const requested = parseFloat(item.quantity) || 0;
+      
+      // Check if product is expired
+      if (product.expiry_date) {
+        const expiry = new Date(product.expiry_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (expiry < today) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            success: false,
+            message: `Cannot sell "${product.name}". This product expired on ${new Date(product.expiry_date).toLocaleDateString()}. Please remove it from stock.`
+          });
+        }
+      }
+      
       if (requested > available) {
         await client.query('ROLLBACK');
         return res.status(400).json({
           success: false,
-          message: `Insufficient stock for "${stockCheck.rows[0].name}". Available: ${available}, Requested: ${requested}`,
+          message: `Insufficient stock for "${product.name}". Available: ${available}, Requested: ${requested}`,
         });
       }
     }

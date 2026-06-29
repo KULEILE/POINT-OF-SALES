@@ -51,7 +51,17 @@ const getByBarcode = async (req, res) => {
       [req.params.barcode]
     );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Product not found.' });
-    return res.json({ success: true, product: result.rows[0] });
+    
+    // Check if product is expired
+    const product = result.rows[0];
+    if (product.expiry_date && new Date(product.expiry_date) <= new Date()) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `This product has expired on ${new Date(product.expiry_date).toLocaleDateString()}. Please remove it from sale.` 
+      });
+    }
+    
+    return res.json({ success: true, product: product });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
@@ -68,25 +78,79 @@ const getCategories = async (req, res) => {
 
 const getLowStock = async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM v_low_stock_alerts`);
+    const result = await pool.query(`SELECT * FROM v_low_stock_alerts ORDER BY 
+      CASE 
+        WHEN stock_quantity <= 0 THEN 1
+        WHEN stock_quantity <= min_stock THEN 2
+        WHEN expiry_date IS NOT NULL AND expiry_date <= CURRENT_DATE THEN 3
+        ELSE 4
+      END`);
     return res.json({ success: true, products: result.rows });
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'Server error.' });
+    console.error('[products/getLowStock]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch low stock products.' });
+  }
+};
+
+const getExpiredProducts = async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM v_expired_products ORDER BY days_expired DESC`);
+    return res.json({ success: true, products: result.rows });
+  } catch (err) {
+    console.error('[products/getExpiredProducts]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch expired products.' });
   }
 };
 
 const create = async (req, res) => {
-  const { name, local_name, description, category_id, supplier_id, brand, sku, barcode, cost_price, selling_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, reorder_level, reorder_quantity, stock_quantity, stock_unit } = req.body;
+  const { 
+    name, local_name, description, category_id, supplier_id, brand, sku, barcode, 
+    cost_price, selling_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, 
+    reorder_level, reorder_quantity, stock_quantity, stock_unit, expiry_date, min_stock, location 
+  } = req.body;
+  
   if (!name || !sku || selling_price == null || cost_price == null) {
-    return res.status(400).json({ success: false, message: 'name, sku, selling_price and cost_price are required.' });
+    return res.status(400).json({ success: false, message: 'Name, SKU, selling price and cost price are required.' });
   }
+
+  // Validate expiry date - cannot be in the past
+  if (expiry_date) {
+    const expiry = new Date(expiry_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (expiry < today) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Expiry date cannot be in the past. Please select a future date.' 
+      });
+    }
+  }
+
   try {
     const result = await pool.query(
-      `INSERT INTO products (name,local_name,description,category_id,supplier_id,brand,sku,barcode,cost_price,selling_price,tax_rate,tax_exempt,sold_by_weight,weight_unit,reorder_level,reorder_quantity,stock_quantity,stock_unit,created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
-      [name, local_name||null, description||null, category_id||null, supplier_id||null, brand||null, sku, barcode||null, cost_price, selling_price, tax_rate??15, tax_exempt??false, sold_by_weight??false, weight_unit||null, reorder_level??10, reorder_quantity??50, stock_quantity??0, stock_unit||'piece', req.user.user_id]
+      `INSERT INTO products (
+        name, local_name, description, category_id, supplier_id, brand, sku, barcode, 
+        cost_price, selling_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, 
+        reorder_level, reorder_quantity, stock_quantity, stock_unit, 
+        expiry_date, min_stock, location, created_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+      [
+        name, local_name||null, description||null, category_id||null, supplier_id||null, 
+        brand||null, sku, barcode||null, cost_price, selling_price, tax_rate??15, tax_exempt??false, 
+        sold_by_weight??false, weight_unit||null, reorder_level??10, reorder_quantity??50, 
+        stock_quantity??0, stock_unit||'piece', expiry_date||null, min_stock??5, location||'Main Store', 
+        req.user.user_id
+      ]
     );
-    await auditLog(pool, { user_id: req.user.user_id, username: req.user.username, action_type: 'CREATE_PRODUCT', action_details: `Created: ${name}`, affected_table: 'products', affected_record_id: result.rows[0].product_id, new_values: result.rows[0] });
+    await auditLog(pool, { 
+      user_id: req.user.user_id, 
+      username: req.user.username, 
+      action_type: 'CREATE_PRODUCT', 
+      action_details: `Created: ${name}`, 
+      affected_table: 'products', 
+      affected_record_id: result.rows[0].product_id, 
+      new_values: result.rows[0] 
+    });
     return res.status(201).json({ success: true, product: result.rows[0] });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ success: false, message: 'SKU or barcode already exists.' });
@@ -96,20 +160,55 @@ const create = async (req, res) => {
 };
 
 const update = async (req, res) => {
-  const allowed = ['name','local_name','description','category_id','supplier_id','brand','barcode','selling_price','cost_price','tax_rate','tax_exempt','reorder_level','status','image_url'];
-  const updates = []; const values = [];
-  allowed.forEach(k => { if (req.body[k] !== undefined) { values.push(req.body[k]); updates.push(`${k}=$${values.length}`); } });
+  // Exclude expiry_date from allowed updates - it cannot be edited
+  const allowed = ['name','local_name','description','category_id','supplier_id','brand','barcode','selling_price','cost_price','tax_rate','tax_exempt','reorder_level','status','image_url','min_stock','location'];
+  const updates = []; 
+  const values = [];
+  
+  allowed.forEach(k => { 
+    if (req.body[k] !== undefined) { 
+      values.push(req.body[k]); 
+      updates.push(`${k}=$${values.length}`); 
+    } 
+  });
+  
   if (!updates.length) return res.status(400).json({ success: false, message: 'No fields to update.' });
+  
   values.push(req.params.id);
   try {
+    // Check if expiry_date is being edited - block it
+    if (req.body.expiry_date !== undefined) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Expiry date cannot be edited after product creation. Please contact administrator.' 
+      });
+    }
+
     const old = await pool.query(`SELECT * FROM products WHERE product_id = $1`, [req.params.id]);
-    const result = await pool.query(`UPDATE products SET ${updates.join(',')}, updated_at=NOW() WHERE product_id=$${values.length} RETURNING *`, values);
+    const result = await pool.query(
+      `UPDATE products SET ${updates.join(',')}, updated_at=NOW() WHERE product_id=$${values.length} RETURNING *`, 
+      values
+    );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Product not found.' });
-    await auditLog(pool, { user_id: req.user.user_id, username: req.user.username, action_type: 'UPDATE_PRODUCT', action_details: `Updated: ${result.rows[0].name}`, affected_table: 'products', affected_record_id: result.rows[0].product_id, old_values: old.rows[0], new_values: result.rows[0] });
+    
+    await auditLog(pool, { 
+      user_id: req.user.user_id, 
+      username: req.user.username, 
+      action_type: 'UPDATE_PRODUCT', 
+      action_details: `Updated: ${result.rows[0].name}`, 
+      affected_table: 'products', 
+      affected_record_id: result.rows[0].product_id, 
+      old_values: old.rows[0], 
+      new_values: result.rows[0] 
+    });
     return res.json({ success: true, product: result.rows[0] });
   } catch (err) {
+    console.error('[products/update]', err.message);
     return res.status(500).json({ success: false, message: 'Failed to update product.' });
   }
 };
 
-module.exports = { getAll, getById, getByBarcode, getCategories, getLowStock, create, update };
+module.exports = { 
+  getAll, getById, getByBarcode, getCategories, 
+  getLowStock, getExpiredProducts, create, update 
+};

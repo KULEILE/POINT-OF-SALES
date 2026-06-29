@@ -29,15 +29,30 @@ const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
     if (e.key === 'Enter' && barcode.trim()) {
       try {
         const r = await productService.getByBarcode(barcode.trim());
-        onAddToCart(r.data.product);
-        toast.success(`Added: ${r.data.product.name}`);
+        const product = r.data.product;
+        
+        // Check if product is expired
+        if (product.expiry_date && new Date(product.expiry_date) <= new Date()) {
+          toast.error(`"${product.name}" has expired. Cannot add to cart.`);
+          setBarcode('');
+          return;
+        }
+        
+        onAddToCart(product);
+        toast.success(`Added: ${product.name}`);
         setBarcode('');
-      } catch {
-        toast.error('Product not found');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Product not found');
         setBarcode('');
       }
     }
   };
+
+  // Filter out expired products from display (or keep them with warning)
+  const displayProducts = products.filter(p => {
+    // Show all products but expired ones will be visually marked
+    return true;
+  });
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -88,13 +103,13 @@ const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
               <div key={i} className="bg-surface-card rounded-xl h-28 animate-pulse" />
             ))}
           </div>
-        ) : products.length === 0 ? (
+        ) : displayProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-text-faint">
             <p className="text-sm">No products found</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {products.map(p => (
+            {displayProducts.map(p => (
               <ProductCard key={p.product_id} product={p} onAdd={onAddToCart} />
             ))}
           </div>
