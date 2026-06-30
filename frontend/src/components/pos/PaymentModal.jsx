@@ -64,7 +64,7 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
         items: cart.map(i => ({
           product_id: i.product_id,
           quantity: i.quantity,
-          unit_price: i.selling_price,
+          unit_price: i.unit_price || i.selling_price,
           discount_applied: i.discount_applied || 0,
           tax_rate: i.tax_rate || 15,
           tax_exempt: i.tax_exempt || false,
@@ -92,8 +92,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
       setLoading(false);
     }
   };
-
-  const saleTypeLabel = isWholesale ? 'Wholesale' : 'Retail';
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">

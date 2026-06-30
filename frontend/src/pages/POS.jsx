@@ -15,6 +15,7 @@ const POS = () => {
   const {
     cart, addToCart, removeFromCart, updateQuantity,
     updateDiscount, clearCart, subtotal, taxAmount, total, itemCount,
+    isWholesale, setWholesaleMode
   } = useCart();
 
   const [saleMode, setSaleMode] = useState('cash');
@@ -25,17 +26,14 @@ const POS = () => {
   const [showSettlement, setShowSettlement] = useState(false);
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
   const [settlementCustomer, setSettlementCustomer] = useState(null);
-  const [isWholesale, setIsWholesale] = useState(false);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
     setSelectedCustomer(null);
-    // Do not reset wholesale when changing mode - let cashier decide
   };
 
   const handleToggleWholesale = () => {
-    // Remove cash-only restriction - wholesale works with all modes
-    setIsWholesale(!isWholesale);
+    setWholesaleMode(!isWholesale);
     if (!isWholesale) {
       toast.success('Wholesale mode enabled');
     } else {
@@ -73,7 +71,7 @@ const POS = () => {
     setCompletedTx(tx);
     setRefreshKey(prev => prev + 1);
     setSelectedCustomer(null);
-    setIsWholesale(false);
+    setWholesaleMode(false);
   };
 
   const handleNewSale = () => {
@@ -81,7 +79,7 @@ const POS = () => {
     setCompletedTx(null);
     setSelectedCustomer(null);
     setSaleMode('cash');
-    setIsWholesale(false);
+    setWholesaleMode(false);
   };
 
   const handleSettlementSuccess = () => {
@@ -102,7 +100,6 @@ const POS = () => {
 
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
-  // Wholesale mode is active when isWholesale is true regardless of sale mode
   const isWholesaleMode = isWholesale;
 
   return (

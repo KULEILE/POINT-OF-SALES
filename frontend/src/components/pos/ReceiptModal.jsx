@@ -14,7 +14,9 @@ const ReceiptModal = ({
   const isPaymentReceipt = paymentType === 'credit' || paymentType === 'layby';
   const isCreditPayment = paymentType === 'credit';
   const isLaybyPayment = paymentType === 'layby';
-  const isCashSale = transaction?.payment_method === 'cash';
+  
+  // Only show duration for credit and layby sales
+  const isCreditOrLaybySale = transaction?.payment_method === 'credit' || transaction?.payment_method === 'layby';
 
   const receiptTitle = isWholesale ? 'WHOLESALE INVOICE' : 'SALE RECEIPT';
 
@@ -69,13 +71,14 @@ const ReceiptModal = ({
                   <span className="font-600 text-primary">Wholesale</span>
                 </div>
               )}
-              {!isCashSale && (transaction?.duration_days || transaction?.due_date) && (
+              {/* Duration and Due Date - ONLY for Credit and Layby sales */}
+              {isCreditOrLaybySale && (transaction?.duration_days || transaction?.due_date) && (
                 <div className="flex justify-between">
                   <span>Duration:</span>
                   <span className="font-600">{transaction?.duration_days || 30} days</span>
                 </div>
               )}
-              {!isCashSale && transaction?.due_date && (
+              {isCreditOrLaybySale && transaction?.due_date && (
                 <div className="flex justify-between">
                   <span>Due Date:</span>
                   <span className="font-600">{formatDateTime(transaction.due_date)}</span>
@@ -109,14 +112,17 @@ const ReceiptModal = ({
                   <span className="w-20 text-right">Amount</span>
                 </div>
 
-                {cart && cart.map((item, i) => (
-                  <div key={i} className="flex justify-between text-text-muted">
-                    <span className="flex-1 truncate">{item.name}</span>
-                    <span className="w-16 text-center">{formatCurrency(item.selling_price)}</span>
-                    <span className="w-8 text-center">{item.quantity}</span>
-                    <span className="w-20 text-right">{formatCurrency(item.selling_price * item.quantity)}</span>
-                  </div>
-                ))}
+                {cart && cart.map((item, i) => {
+                  const price = item.unit_price || item.selling_price;
+                  return (
+                    <div key={i} className="flex justify-between text-text-muted">
+                      <span className="flex-1 truncate">{item.name}</span>
+                      <span className="w-16 text-center">{formatCurrency(price)}</span>
+                      <span className="w-8 text-center">{item.quantity}</span>
+                      <span className="w-20 text-right">{formatCurrency(price * item.quantity)}</span>
+                    </div>
+                  );
+                })}
 
                 <div className="border-t border-dashed border-surface-border my-2" />
 

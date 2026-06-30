@@ -1,14 +1,18 @@
 import React from 'react';
 import { formatCurrency } from '../../utils/formatters';
 
-const CartItem = ({ item, onUpdateQty, onRemove, onUpdateDiscount }) => {
-  const line = item.selling_price * item.quantity * (1 - item.discount_applied / 100);
+const CartItem = ({ item, onUpdateQty, onRemove, onUpdateDiscount, isWholesale }) => {
+  // Use unit_price if available, otherwise fallback to selling_price
+  const pricePerUnit = item.unit_price || item.selling_price;
+  const line = pricePerUnit * item.quantity * (1 - item.discount_applied / 100);
+  const priceLabel = isWholesale ? 'Wholesale' : 'Retail';
+
   return (
     <div className="bg-surface-bg border border-surface-border rounded-lg p-3">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-600 text-text-primary truncate">{item.name}</p>
-          <p className="text-xs text-text-muted">{formatCurrency(item.selling_price)} each</p>
+          <p className="text-xs text-text-muted">{formatCurrency(pricePerUnit)} each ({priceLabel})</p>
         </div>
         <button onClick={() => onRemove(item.product_id)} className="text-text-faint hover:text-danger text-xl leading-none flex-shrink-0 transition-colors">×</button>
       </div>

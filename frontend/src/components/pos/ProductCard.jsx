@@ -9,8 +9,8 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
   
   const isExpired = product.expiry_date && new Date(product.expiry_date) <= new Date();
 
-  // Determine which price to show
-  const displayPrice = isWholesale && product.wholesale_price 
+  // Determine which price to show and use for adding to cart
+  const displayPrice = isWholesale && product.wholesale_price && product.wholesale_price > 0
     ? product.wholesale_price 
     : product.selling_price;
 
@@ -32,7 +32,13 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
       return;
     }
 
-    onAdd(product);
+    // Pass the product with the appropriate price
+    const productToAdd = {
+      ...product,
+      unit_price: displayPrice,
+      selling_price: displayPrice // Override for cart calculations
+    };
+    onAdd(productToAdd);
   };
 
   let cardStyle = 'border-surface-border hover:border-primary cursor-pointer active:scale-95';
@@ -61,14 +67,14 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
       {product.category_name && (
         <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">{product.category_name}</span>
       )}
-      {isWholesale && product.wholesale_price && (
+      {isWholesale && product.wholesale_price && product.wholesale_price > 0 && (
         <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full ml-1">Wholesale</span>
       )}
       <p className="text-sm font-600 text-text-primary mt-2 leading-tight line-clamp-2">{product.name}</p>
       {product.local_name && <p className="text-xs text-text-muted mt-0.5">{product.local_name}</p>}
       <div className="flex items-center gap-2 mt-2">
         <p className="text-primary font-700 text-base">{formatCurrency(displayPrice)}</p>
-        {isWholesale && product.wholesale_price && product.wholesale_price < product.selling_price && (
+        {isWholesale && product.wholesale_price && product.wholesale_price > 0 && product.wholesale_price < product.selling_price && (
           <p className="text-xs text-text-muted line-through">{formatCurrency(product.selling_price)}</p>
         )}
       </div>
