@@ -20,7 +20,10 @@ const Customers = () => {
     address: '',
     district: '',
     customer_type: 'walk_in',
-    credit_limit: 0
+    credit_limit: 0,
+    business_name: '',
+    vat_number: '',
+    is_wholesale: false
   });
 
   const load = () => {
@@ -44,7 +47,10 @@ const Customers = () => {
       address: '',
       district: '',
       customer_type: 'walk_in',
-      credit_limit: 0
+      credit_limit: 0,
+      business_name: '',
+      vat_number: '',
+      is_wholesale: false
     });
     setShowModal(true);
   };
@@ -58,7 +64,10 @@ const Customers = () => {
       address: c.address || '',
       district: c.district || '',
       customer_type: c.customer_type,
-      credit_limit: c.credit_limit
+      credit_limit: c.credit_limit,
+      business_name: c.business_name || '',
+      vat_number: c.vat_number || '',
+      is_wholesale: c.is_wholesale || false
     });
     setShowModal(true);
   };
@@ -108,7 +117,7 @@ const Customers = () => {
       <div className="mb-4">
         <input
           className="k-input max-w-sm"
-          placeholder="Search by name or phone..."
+          placeholder="Search by name, phone or business name..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -119,6 +128,7 @@ const Customers = () => {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Business</th>
               <th>Phone</th>
               <th>Type</th>
               <th>Balance</th>
@@ -131,20 +141,26 @@ const Customers = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="text-center py-8 text-text-faint">Loading...</td></tr>
+              <tr><td colSpan={10} className="text-center py-8 text-text-faint">Loading...</td></tr>
             ) : customers.length === 0 ? (
-              <tr><td colSpan={9} className="text-center py-8 text-text-faint">No customers found</td></tr>
+              <tr><td colSpan={10} className="text-center py-8 text-text-faint">No customers found</td></tr>
             ) : (
               customers.map(c => {
                 const hasBalance = parseFloat(c.current_balance) > 0;
                 const isOverdue = c.is_overdue || false;
                 const daysRemaining = c.days_remaining !== null ? c.days_remaining : null;
+                const isWholesale = c.is_wholesale || false;
 
                 return (
                   <tr key={c.customer_id}>
                     <td className="font-500 text-text-primary">{c.full_name}</td>
+                    <td>{c.business_name || '—'}</td>
                     <td>{c.phone || '—'}</td>
-                    <td><span className="k-badge-cyan capitalize">{c.customer_type?.replace('_', ' ')}</span></td>
+                    <td>
+                      <span className={`text-xs font-600 px-2 py-0.5 rounded-full ${isWholesale ? 'bg-primary/10 text-primary' : 'bg-cyan/10 text-cyan'}`}>
+                        {isWholesale ? 'Wholesale' : c.customer_type?.replace('_', ' ')}
+                      </span>
+                    </td>
                     <td className={hasBalance ? 'text-warning font-600' : 'text-text-muted'}>
                       {formatCurrency(c.current_balance)}
                     </td>
@@ -195,7 +211,7 @@ const Customers = () => {
         </table>
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editCust ? 'Edit Customer' : 'Add Customer'}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editCust ? 'Edit Customer' : 'Add Customer'} size="lg">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -208,6 +224,16 @@ const Customers = () => {
               />
             </div>
             <div>
+              <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Business Name</label>
+              <input
+                type="text"
+                className="k-input"
+                placeholder="Business name (for wholesale)"
+                value={form.business_name}
+                onChange={e => setForm({ ...form, business_name: e.target.value })}
+              />
+            </div>
+            <div>
               <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Phone</label>
               <input
                 type="tel"
@@ -215,6 +241,16 @@ const Customers = () => {
                 placeholder="+266 5000 0000"
                 value={form.phone}
                 onChange={e => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">VAT Number</label>
+              <input
+                type="text"
+                className="k-input"
+                placeholder="VAT number (for wholesale)"
+                value={form.vat_number}
+                onChange={e => setForm({ ...form, vat_number: e.target.value })}
               />
             </div>
             <div>
@@ -258,6 +294,17 @@ const Customers = () => {
                 onChange={e => setForm({ ...form, credit_limit: parseFloat(e.target.value) || 0 })}
               />
             </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 rounded border-surface-border text-primary focus:ring-primary"
+                checked={form.is_wholesale}
+                onChange={e => setForm({ ...form, is_wholesale: e.target.checked })}
+              />
+              Wholesale Customer
+            </label>
           </div>
           <div>
             <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Address</label>

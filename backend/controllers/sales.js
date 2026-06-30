@@ -1,6 +1,41 @@
 const pool = require('../config/db');
 const { auditLog, paginate } = require('../utils/helpers');
 
+const getWholesaleSettings = async () => {
+  const result = await pool.query(`SELECT * FROM wholesale_settings LIMIT 1`);
+  return result.rows[0] || { min_wholesale_quantity: 10, enable_tiered_discounts: false, default_discount_percentage: 0 };
+};
+
+const getDiscountTiers = async () => {
+  const result = await pool.query(`
+    SELECT * FROM discount_tiers 
+    WHERE is_active = TRUE 
+    ORDER BY min_quantity ASC
+  `);
+  return result.rows;
+};
+
+const calculateWholesalePrice = (product, quantity, settings, tiers) => {
+  let unitPrice = parseFloat(product.wholesale_price) || parseFloat(product.selling_price);
+  let discount = 0;
+  
+  if (settings.enable_tiered_discounts && tiers && tiers.length > 0) {
+    for (const tier of tiers) {
+      const minQty = parseInt(tier.min_quantity);
+      const maxQty = tier.max_quantity ? parseInt(tier.max_quantity) : Infinity;
+      if (quantity >= minQty && quantity <= maxQty) {
+        discount = parseFloat(tier.discount_percentage) || 0;
+        break;
+      }
+    }
+  } else {
+    discount = parseFloat(settings.default_discount_percentage) || 0;
+  }
+  
+  const discountedPrice = unitPrice * (1 - discount / 100);
+  return { unitPrice, discount, discountedPrice };
+};
+
 const create = async (req, res) => {
   const {
     items,
@@ -11,6 +46,9 @@ const create = async (req, res) => {
     deposit_amount,
     duration_days,
     notes,
+    customer_type,
+    is_wholesale,
+    wholesale_discount
   } = req.body;
 
   if (!items || !items.length) {
@@ -20,7 +58,9 @@ const create = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Payment method is required.' });
   }
 
-  // Credit and layby require a customer
+  const isWholesale = is_wholesale || false;
+  const finalCustomerType = customer_type || (isWholesale ? 'wholesale' : 'retail');
+
   if ((payment_method === 'credit' || payment_method === 'layby') && !customer_id) {
     return res.status(400).json({
       success: false,
@@ -28,7 +68,6 @@ const create = async (req, res) => {
     });
   }
 
-  // Duration validation for credit and layby
   if ((payment_method === 'credit' || payment_method === 'layby') && !duration_days) {
     return res.status(400).json({
       success: false,
@@ -48,12 +87,20 @@ const create = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Stock validation and expiry check
+    // Get wholesale settings
+    const settings = await getWholesaleSettings();
+    const tiers = await getDiscountTiers();
+
+    // Stock validation and price calculation
+    let subtotal = 0, total_tax = 0;
+    const processedItems = [];
+
     for (const item of items) {
       const stockCheck = await client.query(
-        `SELECT stock_quantity, name, expiry_date FROM products WHERE product_id = $1`,
+        `SELECT stock_quantity, name, expiry_date, selling_price, wholesale_price FROM products WHERE product_id = $1`,
         [item.product_id]
       );
+      
       if (!stockCheck.rows[0]) {
         await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: `Product not found: ${item.product_id}` });
@@ -63,7 +110,6 @@ const create = async (req, res) => {
       const available = parseFloat(product.stock_quantity) || 0;
       const requested = parseFloat(item.quantity) || 0;
       
-      // Check if product is expired
       if (product.expiry_date) {
         const expiry = new Date(product.expiry_date);
         const today = new Date();
@@ -72,7 +118,7 @@ const create = async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({
             success: false,
-            message: `Cannot sell "${product.name}". This product expired on ${new Date(product.expiry_date).toLocaleDateString()}. Please remove it from stock.`
+            message: `Cannot sell "${product.name}". This product expired on ${new Date(product.expiry_date).toLocaleDateString()}.`
           });
         }
       }
@@ -84,17 +130,31 @@ const create = async (req, res) => {
           message: `Insufficient stock for "${product.name}". Available: ${available}, Requested: ${requested}`,
         });
       }
-    }
 
-    // Calculate totals
-    let subtotal = 0, total_tax = 0;
-    for (const item of items) {
-      const base = parseFloat(item.unit_price) * parseFloat(item.quantity);
-      const discounted = base * (1 - (parseFloat(item.discount_applied) || 0) / 100);
+      // Determine price based on wholesale or retail
+      let unitPrice = parseFloat(item.unit_price) || parseFloat(product.selling_price);
+      let discountApplied = parseFloat(item.discount_applied) || 0;
+
+      if (isWholesale && product.wholesale_price) {
+        const wholesaleResult = calculateWholesalePrice(product, requested, settings, tiers);
+        unitPrice = wholesaleResult.discountedPrice;
+        discountApplied = wholesaleResult.discount;
+      }
+
+      const base = unitPrice * requested;
+      const discounted = base * (1 - (discountApplied || 0) / 100);
       const tax = item.tax_exempt ? 0 : discounted * (parseFloat(item.tax_rate) || 15) / 100;
+      
       subtotal += discounted;
       total_tax += tax;
+
+      processedItems.push({
+        ...item,
+        unit_price: unitPrice,
+        discount_applied: discountApplied
+      });
     }
+
     const total_amount = subtotal + total_tax;
 
     // Credit limit validation
@@ -117,7 +177,6 @@ const create = async (req, res) => {
       }
     }
 
-    // Calculate amounts per payment type
     const deposit = parseFloat(deposit_amount) || 0;
     const change_amount =
       payment_method === 'cash'
@@ -135,7 +194,9 @@ const create = async (req, res) => {
     const due_date = new Date();
     due_date.setDate(due_date.getDate() + duration);
 
-    // Insert transaction with duration and due_date
+    // Determine transaction type
+    const transactionType = isWholesale ? 'wholesale' : 'retail';
+
     const txResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -144,7 +205,7 @@ const create = async (req, res) => {
         subtotal, tax_amount, tax_rate, total_amount,
         amount_paid, change_amount, balance_due,
         payment_status, status, notes,
-        duration_days, due_date
+        duration_days, due_date, customer_type
       ) VALUES (
         'PENDING', $1, $2, $3,
         $4, $5,
@@ -152,7 +213,7 @@ const create = async (req, res) => {
         $8, $9, 15, $10,
         $11, $12, $13,
         $14, 'completed', $15,
-        $16, $17
+        $16, $17, $18
       ) RETURNING *`,
       [
         customer_id || null,
@@ -161,7 +222,7 @@ const create = async (req, res) => {
         req.user.user_id,
         req.user.full_name,
         payment_method,
-        payment_method,
+        transactionType,
         subtotal.toFixed(2),
         total_tax.toFixed(2),
         total_amount.toFixed(2),
@@ -172,12 +233,13 @@ const create = async (req, res) => {
         notes || null,
         duration,
         due_date.toISOString().split('T')[0],
+        finalCustomerType
       ]
     );
     const tx = txResult.rows[0];
 
-    // Insert transaction items (stock deducted by DB trigger)
-    for (const item of items) {
+    // Insert transaction items
+    for (const item of processedItems) {
       await client.query(
         `INSERT INTO transaction_items (
           transaction_id, product_id, quantity, unit_type,
@@ -236,8 +298,6 @@ const create = async (req, res) => {
 
     // Handle lay-by sale
     if (payment_method === 'layby' && customer_id) {
-
-      // Record the deposit as first layby payment
       if (deposit > 0) {
         await client.query(
           `INSERT INTO layby_payments (
@@ -254,7 +314,6 @@ const create = async (req, res) => {
         );
       }
 
-      // Update customer balance with remaining lay-by amount
       if (balance_due > 0) {
         const cust = await client.query(
           `SELECT current_balance FROM customers WHERE customer_id = $1`,
@@ -268,7 +327,6 @@ const create = async (req, res) => {
           [next.toFixed(2), customer_id]
         );
 
-        // Record in credit_transactions as layby for tracking
         await client.query(
           `INSERT INTO credit_transactions (
             customer_id, transaction_id, transaction_type,
@@ -281,17 +339,15 @@ const create = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // Audit log
     await auditLog(pool, {
       user_id: req.user.user_id,
       username: req.user.username,
       action_type: 'SALE',
-      action_details: `${payment_method.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number} — Duration: ${duration} days`,
+      action_details: `${payment_method.toUpperCase()} ${transactionType.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number}`,
       affected_table: 'transactions',
       affected_record_id: tx.transaction_id,
     });
 
-    // Fetch final transaction with generated receipt number
     const final = await client.query(
       `SELECT * FROM transactions WHERE transaction_id = $1`,
       [tx.transaction_id]
@@ -313,7 +369,7 @@ const create = async (req, res) => {
 };
 
 const getAll = async (req, res) => {
-  const { date_from, date_to, cashier_id, payment_method, status, page = 1, limit = 20 } = req.query;
+  const { date_from, date_to, cashier_id, payment_method, status, customer_type, page = 1, limit = 20 } = req.query;
   const { limit: lim, offset } = paginate(page, limit);
 
   try {
@@ -321,7 +377,7 @@ const getAll = async (req, res) => {
       SELECT t.transaction_id, t.receipt_number, t.transaction_date,
              t.payment_method, t.total_amount, t.status, t.payment_status,
              t.cashier_name, t.customer_phone, t.is_guest,
-             t.duration_days, t.due_date
+             t.duration_days, t.due_date, t.customer_type
       FROM transactions t WHERE 1=1`;
     const params = [];
 
@@ -330,6 +386,7 @@ const getAll = async (req, res) => {
     if (cashier_id) { params.push(cashier_id); q += ` AND t.cashier_id = $${params.length}`; }
     if (payment_method) { params.push(payment_method); q += ` AND t.payment_method = $${params.length}`; }
     if (status) { params.push(status); q += ` AND t.status = $${params.length}`; }
+    if (customer_type) { params.push(customer_type); q += ` AND t.customer_type = $${params.length}`; }
 
     q += ` ORDER BY t.transaction_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(lim, offset);
@@ -380,7 +437,9 @@ const todaySummary = async (req, res) => {
          COALESCE(SUM(CASE WHEN payment_method = 'card' THEN total_amount ELSE 0 END), 0) AS card_sales,
          COALESCE(SUM(CASE WHEN payment_method = 'mobile' THEN total_amount ELSE 0 END), 0) AS mobile_sales,
          COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN total_amount ELSE 0 END), 0) AS credit_sales,
-         COALESCE(SUM(CASE WHEN payment_method = 'layby' THEN total_amount ELSE 0 END), 0) AS layby_sales
+         COALESCE(SUM(CASE WHEN payment_method = 'layby' THEN total_amount ELSE 0 END), 0) AS layby_sales,
+         COALESCE(SUM(CASE WHEN customer_type = 'wholesale' THEN total_amount ELSE 0 END), 0) AS wholesale_sales,
+         COALESCE(SUM(CASE WHEN customer_type = 'retail' THEN total_amount ELSE 0 END), 0) AS retail_sales
        FROM transactions
        WHERE DATE(transaction_date) = CURRENT_DATE AND status = 'completed'`
     );

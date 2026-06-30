@@ -12,13 +12,17 @@ const Cart = ({
   onRemove, 
   onUpdateDiscount, 
   onClear, 
-  onCheckout 
+  onCheckout,
+  isWholesale 
 }) => (
   <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
     <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
       <div>
         <h2 className="text-sm font-700 text-text-primary">Current Sale</h2>
         <p className="text-xs text-text-muted">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
+        {isWholesale && (
+          <span className="text-xs text-primary font-600">Wholesale Mode</span>
+        )}
       </div>
       {cart.length > 0 && (
         <button onClick={onClear} className="text-xs text-text-faint hover:text-danger border border-surface-border hover:border-danger/50 px-2 py-1 rounded-md transition-all">
@@ -41,7 +45,8 @@ const Cart = ({
             item={item} 
             onUpdateQty={onUpdateQty} 
             onRemove={onRemove} 
-            onUpdateDiscount={onUpdateDiscount} 
+            onUpdateDiscount={onUpdateDiscount}
+            isWholesale={isWholesale}
           />
         ))
       )}
@@ -54,6 +59,12 @@ const Cart = ({
             <span>Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
+          {isWholesale && (
+            <div className="flex justify-between text-sm text-text-muted">
+              <span>Sale Type</span>
+              <span className="text-primary font-600">Wholesale</span>
+            </div>
+          )}
           <div className="flex justify-between text-sm text-text-muted">
             <span>VAT (15%)</span>
             <span>{formatCurrency(taxAmount)}</span>

@@ -13,7 +13,7 @@ const Products = () => {
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState({
     name: '', local_name: '', sku: '', barcode: '', category_id: '', brand: '',
-    cost_price: '', selling_price: '', tax_rate: 15, tax_exempt: false,
+    cost_price: '', selling_price: '', wholesale_price: '', tax_rate: 15, tax_exempt: false,
     reorder_level: 10, min_stock: 5, stock_quantity: 0, stock_unit: 'piece',
     expiry_date: '', location: 'Main Store'
   });
@@ -37,7 +37,7 @@ const Products = () => {
     setEditProduct(null);
     setForm({
       name: '', local_name: '', sku: '', barcode: '', category_id: '', brand: '',
-      cost_price: '', selling_price: '', tax_rate: 15, tax_exempt: false,
+      cost_price: '', selling_price: '', wholesale_price: '', tax_rate: 15, tax_exempt: false,
       reorder_level: 10, min_stock: 5, stock_quantity: 0, stock_unit: 'piece',
       expiry_date: '', location: 'Main Store'
     });
@@ -50,10 +50,9 @@ const Products = () => {
       name: p.name, local_name: p.local_name || '', sku: p.sku,
       barcode: p.barcode || '', category_id: p.category_id || '',
       brand: p.brand || '', cost_price: p.cost_price,
-      selling_price: p.selling_price, tax_rate: p.tax_rate,
-      tax_exempt: p.tax_exempt, reorder_level: p.reorder_level,
-      min_stock: p.min_stock || 5,
-      stock_quantity: p.stock_quantity, stock_unit: p.stock_unit || 'piece',
+      selling_price: p.selling_price, wholesale_price: p.wholesale_price || '',
+      tax_rate: p.tax_rate, tax_exempt: p.tax_exempt, reorder_level: p.reorder_level,
+      min_stock: p.min_stock || 5, stock_quantity: p.stock_quantity, stock_unit: p.stock_unit || 'piece',
       expiry_date: p.expiry_date ? p.expiry_date.split('T')[0] : '',
       location: p.location || 'Main Store'
     });
@@ -63,7 +62,6 @@ const Products = () => {
   const handleSave = async () => {
     try {
       if (editProduct) {
-        // Remove expiry_date from update payload - it cannot be edited
         const updateData = { ...form };
         delete updateData.expiry_date;
         delete updateData.stock_quantity;
@@ -100,7 +98,8 @@ const Products = () => {
               <th>SKU</th>
               <th>Category</th>
               <th>Cost</th>
-              <th>Price</th>
+              <th>Retail Price</th>
+              <th>Wholesale Price</th>
               <th>Stock</th>
               <th>Min Stock</th>
               <th>Expiry Date</th>
@@ -110,11 +109,12 @@ const Products = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="text-center py-8 text-text-faint">Loading products...</td></tr>
+              <tr><td colSpan={11} className="text-center py-8 text-text-faint">Loading products...</td></tr>
             ) : products.length === 0 ? (
-              <tr><td colSpan={10} className="text-center py-8 text-text-faint">No products found</td></tr>
+              <tr><td colSpan={11} className="text-center py-8 text-text-faint">No products found</td></tr>
             ) : products.map(p => {
               const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
+              const hasWholesale = p.wholesale_price && p.wholesale_price > 0;
               return (
                 <tr key={p.product_id}>
                   <td><div className="font-500 text-text-primary">{p.name}</div>{p.local_name && <div className="text-xs text-text-faint">{p.local_name}</div>}</td>
@@ -122,6 +122,7 @@ const Products = () => {
                   <td>{p.category_name || '—'}</td>
                   <td>{formatCurrency(p.cost_price)}</td>
                   <td className="font-600 text-primary">{formatCurrency(p.selling_price)}</td>
+                  <td className="font-600 text-accent">{hasWholesale ? formatCurrency(p.wholesale_price) : '—'}</td>
                   <td><span className={p.stock_quantity <= 0 ? 'text-danger font-600' : p.stock_quantity <= p.min_stock ? 'text-warning font-600' : 'text-text-muted'}>{p.stock_quantity}</span></td>
                   <td>{p.min_stock || 5}</td>
                   <td>
@@ -164,7 +165,7 @@ const Products = () => {
               {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
             </select>
           </div>
-          {[['cost_price','Cost Price','number'],['selling_price','Selling Price','number'],['tax_rate','Tax Rate %','number'],['reorder_level','Reorder Level','number'],['min_stock','Minimum Stock','number'],['stock_quantity','Opening Stock','number']].map(([k,l,t]) => (
+          {[['cost_price','Cost Price','number'],['selling_price','Retail Price','number'],['wholesale_price','Wholesale Price','number'],['tax_rate','Tax Rate %','number'],['reorder_level','Reorder Level','number'],['min_stock','Minimum Stock','number'],['stock_quantity','Opening Stock','number']].map(([k,l,t]) => (
             <div key={k}>
               <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">{l}</label>
               <input type={t} className="k-input" value={form[k]} onChange={e => setForm({...form, [k]: e.target.value})} disabled={editProduct && k === 'stock_quantity'} />

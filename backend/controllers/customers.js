@@ -1,7 +1,6 @@
 const pool = require('../config/db');
 const { paginate, auditLog } = require('../utils/helpers');
 
-// Helper function to check if a transaction is overdue
 const isOverdue = (dueDate) => {
   if (!dueDate) return false;
   const today = new Date();
@@ -9,7 +8,6 @@ const isOverdue = (dueDate) => {
   return today > due;
 };
 
-// Helper function to get days remaining or overdue
 const getDaysInfo = (dueDate) => {
   if (!dueDate) return null;
   const today = new Date();
@@ -20,7 +18,7 @@ const getDaysInfo = (dueDate) => {
 };
 
 const getAll = async (req, res) => {
-  const { search, customer_type, page = 1, limit = 20 } = req.query;
+  const { search, customer_type, is_wholesale, page = 1, limit = 20 } = req.query;
   const { limit: lim, offset } = paginate(page, limit);
   try {
     let q = `
@@ -46,17 +44,20 @@ const getAll = async (req, res) => {
     const params = [];
     if (search) {
       params.push(`%${search}%`);
-      q += ` AND (c.full_name ILIKE $${params.length} OR c.phone ILIKE $${params.length})`;
+      q += ` AND (c.full_name ILIKE $${params.length} OR c.phone ILIKE $${params.length} OR c.business_name ILIKE $${params.length})`;
     }
     if (customer_type) {
       params.push(customer_type);
       q += ` AND c.customer_type = $${params.length}`;
     }
+    if (is_wholesale !== undefined) {
+      params.push(is_wholesale === 'true');
+      q += ` AND c.is_wholesale = $${params.length}`;
+    }
     q += ` ORDER BY c.full_name ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(lim, offset);
     const result = await pool.query(q, params);
 
-    // Add calculated fields
     const customers = result.rows.map(c => ({
       ...c,
       is_overdue: c.due_date ? isOverdue(c.due_date) : false,
@@ -77,7 +78,7 @@ const getById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
     }
     const txs = await pool.query(
-      `SELECT transaction_id, receipt_number, transaction_date, total_amount, payment_method, status, due_date, duration_days
+      `SELECT transaction_id, receipt_number, transaction_date, total_amount, payment_method, status, due_date, duration_days, customer_type
        FROM transactions 
        WHERE customer_id = $1 
        ORDER BY transaction_date DESC 
@@ -114,9 +115,8 @@ const getCustomerDetails = async (req, res) => {
 
     const customer = customerResult.rows[0];
 
-    // Get credit transactions with due date
     const creditTransactions = await pool.query(
-      `SELECT ct.*, t.receipt_number, t.transaction_date, t.transaction_type, t.due_date, t.duration_days
+      `SELECT ct.*, t.receipt_number, t.transaction_date, t.transaction_type, t.due_date, t.duration_days, t.customer_type
        FROM credit_transactions ct
        JOIN transactions t ON ct.transaction_id = t.transaction_id
        WHERE ct.customer_id = $1
@@ -125,11 +125,10 @@ const getCustomerDetails = async (req, res) => {
       [customerId]
     );
 
-    // Get layby transactions with due date and days remaining
     const laybyTransactions = await pool.query(
       `SELECT t.transaction_id, t.receipt_number, t.transaction_date, 
               t.total_amount, t.amount_paid, t.balance_due, t.payment_status,
-              t.due_date, t.duration_days,
+              t.due_date, t.duration_days, t.customer_type,
               (SELECT COUNT(*) FROM layby_payments lp WHERE lp.transaction_id = t.transaction_id) AS payment_count
        FROM transactions t
        WHERE t.customer_id = $1 AND t.payment_method = 'layby'
@@ -137,9 +136,8 @@ const getCustomerDetails = async (req, res) => {
       [customerId]
     );
 
-    // Get recent transactions with due date
     const recentTransactions = await pool.query(
-      `SELECT transaction_id, receipt_number, transaction_date, total_amount, payment_method, status, due_date, duration_days
+      `SELECT transaction_id, receipt_number, transaction_date, total_amount, payment_method, status, due_date, duration_days, customer_type
        FROM transactions 
        WHERE customer_id = $1
        ORDER BY transaction_date DESC
@@ -147,9 +145,8 @@ const getCustomerDetails = async (req, res) => {
       [customerId]
     );
 
-    // Get open credit/layby with overdue status
     const openTransactions = await pool.query(
-      `SELECT transaction_id, receipt_number, payment_method, balance_due, due_date, duration_days
+      `SELECT transaction_id, receipt_number, payment_method, balance_due, due_date, duration_days, customer_type
        FROM transactions 
        WHERE customer_id = $1 
        AND payment_status = 'pending'
@@ -188,15 +185,28 @@ const getCustomerDetails = async (req, res) => {
 };
 
 const create = async (req, res) => {
-  const { full_name, phone, email, address, id_number, district, village_area, customer_type, credit_limit } = req.body;
+  const { 
+    full_name, phone, email, address, id_number, district, village_area, 
+    customer_type, credit_limit, business_name, vat_number, is_wholesale 
+  } = req.body;
+  
   if (!full_name) {
     return res.status(400).json({ success: false, message: 'Full name is required.' });
   }
+  
   try {
     const result = await pool.query(
-      `INSERT INTO customers (full_name, phone, email, address, id_number, district, village_area, customer_type, credit_limit, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [full_name, phone || null, email || null, address || null, id_number || null, district || null, village_area || null, customer_type || 'walk_in', credit_limit || 0, req.user.user_id]
+      `INSERT INTO customers (
+        full_name, phone, email, address, id_number, district, village_area, 
+        customer_type, credit_limit, business_name, vat_number, is_wholesale, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+      [
+        full_name, phone || null, email || null, address || null, 
+        id_number || null, district || null, village_area || null, 
+        customer_type || 'walk_in', credit_limit || 0, 
+        business_name || null, vat_number || null, 
+        is_wholesale || false, req.user.user_id
+      ]
     );
     await auditLog(pool, {
       user_id: req.user.user_id,
@@ -217,7 +227,11 @@ const create = async (req, res) => {
 };
 
 const update = async (req, res) => {
-  const allowed = ['full_name', 'phone', 'email', 'address', 'district', 'village_area', 'customer_type', 'credit_limit', 'is_active'];
+  const allowed = [
+    'full_name', 'phone', 'email', 'address', 'district', 'village_area', 
+    'customer_type', 'credit_limit', 'is_active', 'business_name', 
+    'vat_number', 'is_wholesale'
+  ];
   const updates = [];
   const values = [];
   allowed.forEach(k => {

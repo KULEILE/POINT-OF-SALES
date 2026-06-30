@@ -18,7 +18,7 @@ const DURATION_OPTIONS = [
   { value: 90, label: '90 days' },
 ];
 
-const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onClose }) => {
+const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, onSuccess, onClose }) => {
   const [method, setMethod] = useState('cash');
   const [paid, setPaid] = useState('');
   const [deposit, setDeposit] = useState('');
@@ -36,7 +36,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
   const depositAmt = parseFloat(deposit) || 0;
   const laybyBalance = isLaybySale ? Math.max(0, total - depositAmt) : 0;
 
-  // Calculate due date
   const getDueDate = () => {
     const date = new Date();
     date.setDate(date.getDate() + duration);
@@ -80,6 +79,8 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
         deposit_amount: isLaybySale ? depositAmt : null,
         balance_due: isLaybySale ? laybyBalance : isCreditSale ? total : 0,
         duration_days: isCreditSale || isLaybySale ? duration : null,
+        is_wholesale: isWholesale || false,
+        customer_type: isWholesale ? 'wholesale' : 'retail',
       };
 
       const res = await saleService.create(payload);
@@ -92,6 +93,8 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
     }
   };
 
+  const saleTypeLabel = isWholesale ? 'Wholesale' : 'Retail';
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-surface-card border border-surface-border rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -102,6 +105,9 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
               {isCreditSale ? 'Credit Sale' : isLaybySale ? 'Lay-by Sale' : 'Process Payment'}
             </h2>
             <p className="text-sm text-primary font-600 mt-0.5">Total: {formatCurrency(total)}</p>
+            {isWholesale && (
+              <p className="text-xs text-primary font-500">Wholesale Mode</p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -111,7 +117,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
 
         <div className="p-5 space-y-5">
 
-          {/* Cash Sale */}
           {isCashSale && (
             <>
               <div>
@@ -154,7 +159,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
             </>
           )}
 
-          {/* Credit Sale */}
           {isCreditSale && selectedCustomer && (
             <div className="space-y-4">
               <div className="bg-surface-bg border border-surface-border rounded-xl p-4 space-y-3">
@@ -184,7 +188,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
                 </div>
               </div>
 
-              {/* Duration Input */}
               <div>
                 <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">
                   Payment Duration <span className="text-danger">*</span>
@@ -211,7 +214,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
             </div>
           )}
 
-          {/* Lay-by Sale */}
           {isLaybySale && selectedCustomer && (
             <div className="space-y-4">
               <div className="bg-surface-bg border border-surface-border rounded-xl p-4 space-y-3">
@@ -225,7 +227,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
                 </div>
               </div>
 
-              {/* Duration Input */}
               <div>
                 <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">
                   Payment Duration <span className="text-danger">*</span>
@@ -284,7 +285,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
             </div>
           )}
 
-          {/* Sale Summary */}
           <div className="bg-surface-bg border border-surface-border rounded-lg p-3">
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Items</span>
@@ -292,8 +292,8 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
             </div>
             <div className="flex justify-between text-sm mt-1">
               <span className="text-text-muted">Sale type</span>
-              <span className={`font-600 capitalize ${isCreditSale ? 'text-warning' : isLaybySale ? 'text-accent' : 'text-primary'}`}>
-                {isCreditSale ? 'Credit' : isLaybySale ? 'Lay-by' : method}
+              <span className={`font-600 capitalize ${isCreditSale ? 'text-warning' : isLaybySale ? 'text-accent' : isWholesale ? 'text-primary' : 'text-primary'}`}>
+                {isCreditSale ? 'Credit' : isLaybySale ? 'Lay-by' : isWholesale ? 'Wholesale' : method}
               </span>
             </div>
             {(isCreditSale || isLaybySale) && (
@@ -304,7 +304,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
             )}
           </div>
 
-          {/* Confirm Button */}
           <button
             onClick={handleProcess}
             disabled={loading || !canSubmit}
@@ -314,7 +313,7 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, onSuccess, onCl
             {loading ? 'Processing...' :
               isCreditSale ? `Record Credit Sale — ${formatCurrency(total)}` :
               isLaybySale ? `Confirm Lay-by — Deposit ${formatCurrency(depositAmt || 0)}` :
-              `Confirm Payment — ${formatCurrency(total)}`}
+              `Confirm ${isWholesale ? 'Wholesale' : 'Payment'} — ${formatCurrency(total)}`}
           </button>
 
         </div>

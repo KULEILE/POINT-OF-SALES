@@ -1,13 +1,22 @@
 import React from 'react';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 
-const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale, paymentType }) => {
+const ReceiptModal = ({ 
+  transaction, 
+  cart, 
+  total, 
+  taxAmount, 
+  onClose, 
+  onNewSale, 
+  paymentType,
+  isWholesale 
+}) => {
   const isPaymentReceipt = paymentType === 'credit' || paymentType === 'layby';
   const isCreditPayment = paymentType === 'credit';
   const isLaybyPayment = paymentType === 'layby';
-  
-  // Check if this is a cash sale (not credit or layby)
   const isCashSale = transaction?.payment_method === 'cash';
+
+  const receiptTitle = isWholesale ? 'WHOLESALE INVOICE' : 'SALE RECEIPT';
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -17,9 +26,14 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
             <span className="text-success text-xl font-700">✓</span>
           </div>
           <h2 className="text-base font-700 text-text-primary">
-            {isPaymentReceipt ? 'Payment Receipt' : 'Sale Complete'}
+            {isPaymentReceipt ? 'Payment Receipt' : receiptTitle}
           </h2>
           <p className="text-xs text-primary font-600 font-mono mt-1">{transaction?.receipt_number}</p>
+          {isWholesale && !isPaymentReceipt && (
+            <span className="text-xs font-600 bg-primary/10 text-primary px-2 py-0.5 rounded-full mt-1 inline-block">
+              Wholesale
+            </span>
+          )}
           {isPaymentReceipt && (
             <span className={`text-xs font-600 px-2 py-0.5 rounded-full mt-1 inline-block ${
               isCreditPayment ? 'bg-warning/10 text-warning' : 'bg-accent/10 text-accent'
@@ -43,13 +57,18 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
                 <span>Payment:</span>
                 <span className="font-600 capitalize">{transaction?.payment_method || 'N/A'}</span>
               </div>
-              {isPaymentReceipt && transaction?.customer_phone && (
+              {transaction?.customer_phone && (
                 <div className="flex justify-between">
                   <span>Customer:</span>
                   <span className="font-600">{transaction.customer_phone}</span>
                 </div>
               )}
-              {/* Duration and Due Date - ONLY for Credit and Layby sales */}
+              {isWholesale && !isPaymentReceipt && (
+                <div className="flex justify-between">
+                  <span>Sale Type:</span>
+                  <span className="font-600 text-primary">Wholesale</span>
+                </div>
+              )}
               {!isCashSale && (transaction?.duration_days || transaction?.due_date) && (
                 <div className="flex justify-between">
                   <span>Duration:</span>
@@ -83,7 +102,6 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
               </>
             ) : (
               <>
-                {/* Items Header with Unit Price */}
                 <div className="flex justify-between text-text-muted text-[10px] font-600 uppercase">
                   <span className="flex-1">Item</span>
                   <span className="w-16 text-center">Unit Price</span>
@@ -91,7 +109,6 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
                   <span className="w-20 text-right">Amount</span>
                 </div>
 
-                {/* Items with Unit Price */}
                 {cart && cart.map((item, i) => (
                   <div key={i} className="flex justify-between text-text-muted">
                     <span className="flex-1 truncate">{item.name}</span>
@@ -121,7 +138,6 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
                   <span className="w-24 text-right">{formatCurrency(total)}</span>
                 </div>
 
-                {/* Cash Payment Details */}
                 {transaction?.payment_method === 'cash' && (
                   <>
                     <div className="flex justify-between text-text-muted text-[10px]">
@@ -135,7 +151,6 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
                   </>
                 )}
 
-                {/* Credit Balance Due */}
                 {transaction?.payment_method === 'credit' && transaction?.balance_due > 0 && (
                   <div className="flex justify-between text-warning text-[10px]">
                     <span>Balance Due</span>
@@ -147,12 +162,8 @@ const ReceiptModal = ({ transaction, cart, total, taxAmount, onClose, onNewSale,
 
             <div className="border-t border-dashed border-surface-border my-2" />
 
-            {/* Footer Message */}
             <p className="text-center text-text-faint text-[10px]">
-              Thank you for shopping with us!
-              
-              Goods sold are not returnable
-              without proof of purchase.
+              Goods sold are not returnable without proof of purchase.
             </p>
             {transaction?.notes && (
               <p className="text-center text-text-faint text-[9px]">Note: {transaction.notes}</p>

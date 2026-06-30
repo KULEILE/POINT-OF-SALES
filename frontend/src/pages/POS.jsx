@@ -25,10 +25,28 @@ const POS = () => {
   const [showSettlement, setShowSettlement] = useState(false);
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
   const [settlementCustomer, setSettlementCustomer] = useState(null);
+  const [isWholesale, setIsWholesale] = useState(false);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
     setSelectedCustomer(null);
+    // Reset wholesale when changing to cash
+    if (mode === 'cash') {
+      setIsWholesale(false);
+    }
+  };
+
+  const handleToggleWholesale = () => {
+    if (saleMode === 'cash') {
+      setIsWholesale(!isWholesale);
+      if (!isWholesale) {
+        toast.success('Wholesale mode enabled');
+      } else {
+        toast.success('Retail mode enabled');
+      }
+    } else {
+      toast.error('Wholesale mode is only available for cash sales');
+    }
   };
 
   const handleCheckout = () => {
@@ -61,6 +79,7 @@ const POS = () => {
     setCompletedTx(tx);
     setRefreshKey(prev => prev + 1);
     setSelectedCustomer(null);
+    setIsWholesale(false);
   };
 
   const handleNewSale = () => {
@@ -68,6 +87,7 @@ const POS = () => {
     setCompletedTx(null);
     setSelectedCustomer(null);
     setSaleMode('cash');
+    setIsWholesale(false);
   };
 
   const handleSettlementSuccess = () => {
@@ -88,16 +108,39 @@ const POS = () => {
 
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
+  const isWholesaleMode = isWholesale && saleMode === 'cash';
+
   return (
     <div className="flex h-full overflow-hidden">
 
       <div className="flex-1 p-4 overflow-hidden flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <ModeSwitch active={saleMode} onChange={handleModeChange} />
+          <div className="flex items-center gap-2">
+            <ModeSwitch active={saleMode} onChange={handleModeChange} />
+            <button
+              onClick={handleToggleWholesale}
+              className={`px-3 py-1.5 rounded-lg text-xs font-600 transition-all border
+                ${isWholesaleMode 
+                  ? 'bg-primary text-white border-primary' 
+                  : saleMode === 'cash' 
+                    ? 'bg-surface-card border-surface-border text-text-muted hover:border-primary/50' 
+                    : 'bg-surface-card border-surface-border text-text-faint opacity-50 cursor-not-allowed'}`}
+              disabled={saleMode !== 'cash'}
+            >
+              {isWholesaleMode ? 'Wholesale' : 'Retail'}
+            </button>
+          </div>
           <button onClick={handleOpenSettlement} className="k-btn-outline text-sm px-4 py-2">
             Settle Debt
           </button>
         </div>
+
+        {isWholesaleMode && (
+          <div className="bg-primary/10 border border-primary/30 rounded-lg px-4 py-2 flex items-center justify-between">
+            <p className="text-xs text-primary font-600">Wholesale Mode Active</p>
+            <p className="text-xs text-text-muted">Products will show wholesale prices</p>
+          </div>
+        )}
 
         {(saleMode === 'credit' || saleMode === 'layby') && (
           <CustomerPanel
@@ -112,6 +155,7 @@ const POS = () => {
           <ProductGrid
             onAddToCart={addToCart}
             refreshTrigger={refreshKey}
+            isWholesale={isWholesaleMode}
           />
         </div>
       </div>
@@ -125,6 +169,7 @@ const POS = () => {
           itemCount={itemCount}
           saleMode={saleMode}
           selectedCustomer={selectedCustomer}
+          isWholesale={isWholesaleMode}
           onUpdateQty={updateQuantity}
           onRemove={removeFromCart}
           onUpdateDiscount={updateDiscount}
@@ -139,6 +184,7 @@ const POS = () => {
           cart={cart}
           saleMode={saleMode}
           selectedCustomer={selectedCustomer}
+          isWholesale={isWholesaleMode}
           onSuccess={handleSuccess}
           onClose={() => setShowPayment(false)}
         />
@@ -150,6 +196,7 @@ const POS = () => {
           cart={cart}
           total={total}
           taxAmount={taxAmount}
+          isWholesale={isWholesaleMode}
           onClose={() => setCompletedTx(null)}
           onNewSale={handleNewSale}
         />

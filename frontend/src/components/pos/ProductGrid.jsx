@@ -3,7 +3,7 @@ import { productService } from '../../services/productService';
 import ProductCard from './ProductCard';
 import toast from 'react-hot-toast';
 
-const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
+const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +31,6 @@ const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
         const r = await productService.getByBarcode(barcode.trim());
         const product = r.data.product;
         
-        // Check if product is expired
         if (product.expiry_date && new Date(product.expiry_date) <= new Date()) {
           toast.error(`"${product.name}" has expired. Cannot add to cart.`);
           setBarcode('');
@@ -48,11 +47,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
     }
   };
 
-  // Filter out expired products from display (or keep them with warning)
-  const displayProducts = products.filter(p => {
-    // Show all products but expired ones will be visually marked
-    return true;
-  });
+  const displayProducts = products.filter(p => true);
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -71,6 +66,11 @@ const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
           onKeyDown={handleBarcode} 
         />
       </div>
+      {isWholesale && (
+        <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 text-xs text-primary font-500">
+          Wholesale prices shown
+        </div>
+      )}
       <div className="flex gap-2 overflow-x-auto pb-1">
         <button 
           onClick={() => setActivecat('')} 
@@ -110,7 +110,12 @@ const ProductGrid = ({ onAddToCart, refreshTrigger }) => {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {displayProducts.map(p => (
-              <ProductCard key={p.product_id} product={p} onAdd={onAddToCart} />
+              <ProductCard 
+                key={p.product_id} 
+                product={p} 
+                onAdd={onAddToCart} 
+                isWholesale={isWholesale}
+              />
             ))}
           </div>
         )}

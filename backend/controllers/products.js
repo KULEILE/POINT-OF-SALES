@@ -52,7 +52,6 @@ const getByBarcode = async (req, res) => {
     );
     if (!result.rows[0]) return res.status(404).json({ success: false, message: 'Product not found.' });
     
-    // Check if product is expired
     const product = result.rows[0];
     if (product.expiry_date && new Date(product.expiry_date) <= new Date()) {
       return res.status(400).json({ 
@@ -105,7 +104,7 @@ const getExpiredProducts = async (req, res) => {
 const create = async (req, res) => {
   const { 
     name, local_name, description, category_id, supplier_id, brand, sku, barcode, 
-    cost_price, selling_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, 
+    cost_price, selling_price, wholesale_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, 
     reorder_level, reorder_quantity, stock_quantity, stock_unit, expiry_date, min_stock, location 
   } = req.body;
   
@@ -113,7 +112,6 @@ const create = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Name, SKU, selling price and cost price are required.' });
   }
 
-  // Validate expiry date - cannot be in the past
   if (expiry_date) {
     const expiry = new Date(expiry_date);
     const today = new Date();
@@ -130,16 +128,16 @@ const create = async (req, res) => {
     const result = await pool.query(
       `INSERT INTO products (
         name, local_name, description, category_id, supplier_id, brand, sku, barcode, 
-        cost_price, selling_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, 
+        cost_price, selling_price, wholesale_price, tax_rate, tax_exempt, sold_by_weight, weight_unit, 
         reorder_level, reorder_quantity, stock_quantity, stock_unit, 
         expiry_date, min_stock, location, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
       [
         name, local_name||null, description||null, category_id||null, supplier_id||null, 
-        brand||null, sku, barcode||null, cost_price, selling_price, tax_rate??15, tax_exempt??false, 
-        sold_by_weight??false, weight_unit||null, reorder_level??10, reorder_quantity??50, 
-        stock_quantity??0, stock_unit||'piece', expiry_date||null, min_stock??5, location||'Main Store', 
-        req.user.user_id
+        brand||null, sku, barcode||null, cost_price, selling_price, wholesale_price||null, 
+        tax_rate??15, tax_exempt??false, sold_by_weight??false, weight_unit||null, 
+        reorder_level??10, reorder_quantity??50, stock_quantity??0, stock_unit||'piece', 
+        expiry_date||null, min_stock??5, location||'Main Store', req.user.user_id
       ]
     );
     await auditLog(pool, { 
@@ -160,8 +158,7 @@ const create = async (req, res) => {
 };
 
 const update = async (req, res) => {
-  // Exclude expiry_date from allowed updates - it cannot be edited
-  const allowed = ['name','local_name','description','category_id','supplier_id','brand','barcode','selling_price','cost_price','tax_rate','tax_exempt','reorder_level','status','image_url','min_stock','location'];
+  const allowed = ['name','local_name','description','category_id','supplier_id','brand','barcode','selling_price','wholesale_price','cost_price','tax_rate','tax_exempt','reorder_level','status','image_url','min_stock','location'];
   const updates = []; 
   const values = [];
   
@@ -176,7 +173,6 @@ const update = async (req, res) => {
   
   values.push(req.params.id);
   try {
-    // Check if expiry_date is being edited - block it
     if (req.body.expiry_date !== undefined) {
       return res.status(400).json({ 
         success: false, 

@@ -3,12 +3,16 @@ import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatters';
 import { validateProductStock } from '../../utils/validators';
 
-const ProductCard = ({ product, onAdd }) => {
+const ProductCard = ({ product, onAdd, isWholesale }) => {
   const outOfStock = product.stock_quantity <= 0;
   const lowStock = product.stock_quantity <= (product.min_stock || 5) && !outOfStock;
   
-  // Check if product is expired
   const isExpired = product.expiry_date && new Date(product.expiry_date) <= new Date();
+
+  // Determine which price to show
+  const displayPrice = isWholesale && product.wholesale_price 
+    ? product.wholesale_price 
+    : product.selling_price;
 
   const handleAdd = () => {
     if (isExpired) {
@@ -31,7 +35,6 @@ const ProductCard = ({ product, onAdd }) => {
     onAdd(product);
   };
 
-  // Determine card style based on status
   let cardStyle = 'border-surface-border hover:border-primary cursor-pointer active:scale-95';
   let statusText = `Qty: ${product.stock_quantity}`;
   let statusColor = 'text-text-faint';
@@ -58,9 +61,17 @@ const ProductCard = ({ product, onAdd }) => {
       {product.category_name && (
         <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">{product.category_name}</span>
       )}
+      {isWholesale && product.wholesale_price && (
+        <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full ml-1">Wholesale</span>
+      )}
       <p className="text-sm font-600 text-text-primary mt-2 leading-tight line-clamp-2">{product.name}</p>
       {product.local_name && <p className="text-xs text-text-muted mt-0.5">{product.local_name}</p>}
-      <p className="text-primary font-700 text-base mt-2">{formatCurrency(product.selling_price)}</p>
+      <div className="flex items-center gap-2 mt-2">
+        <p className="text-primary font-700 text-base">{formatCurrency(displayPrice)}</p>
+        {isWholesale && product.wholesale_price && product.wholesale_price < product.selling_price && (
+          <p className="text-xs text-text-muted line-through">{formatCurrency(product.selling_price)}</p>
+        )}
+      </div>
       <div className="flex items-center justify-between mt-1.5">
         <span className={`text-xs font-500 ${statusColor}`}>
           {statusText}

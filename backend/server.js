@@ -95,6 +95,7 @@ app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
+app.use('/api/settings', require('./routes/settings'));
 
 // ============================================================
 // ROOT ROUTE
@@ -116,7 +117,8 @@ app.get('/', (req, res) => {
       suppliers: '/api/suppliers',
       reports: '/api/reports',
       users: '/api/users',
-      audit: '/api/audit'
+      audit: '/api/audit',
+      settings: '/api/settings'
     }
   });
 });
@@ -141,7 +143,8 @@ app.use((req, res) => {
       '/api/suppliers',
       '/api/reports',
       '/api/users',
-      '/api/audit'
+      '/api/audit',
+      '/api/settings'
     ]
   });
 });

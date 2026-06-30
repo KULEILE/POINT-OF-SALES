@@ -1,24 +1,24 @@
 import React from 'react';
-import { useAuth } from '../../context/AuthContext';
 
-const tabs = [
-  { key: 'cash',   label: 'Cash Sale'  },
+const MODES = [
+  { key: 'cash', label: 'Cash Sale' },
   { key: 'credit', label: 'Credit Sale' },
-  { key: 'layby',  label: 'Lay-by'     },
+  { key: 'layby', label: 'Lay-by' },
 ];
 
 const ModeSwitch = ({ active, onChange }) => {
-  const { hasRole } = useAuth();
   return (
-    <div className="flex gap-1 bg-surface-bg border border-surface-border rounded-lg p-1">
-      {tabs.map(tab => (
+    <div className="flex bg-surface-panel border border-surface-border rounded-xl p-1 gap-1">
+      {MODES.map(mode => (
         <button
-          key={tab.key}
-          onClick={() => onChange(tab.key)}
-          className={`flex-1 text-xs font-600 py-1.5 px-3 rounded-md transition-all
-            ${active === tab.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-primary'}`}
+          key={mode.key}
+          onClick={() => onChange(mode.key)}
+          className={`px-4 py-1.5 rounded-lg text-xs font-600 transition-all
+            ${active === mode.key
+              ? 'bg-surface-card text-text-primary shadow-sm'
+              : 'text-text-muted hover:text-text-primary'}`}
         >
-          {tab.label}
+          {mode.label}
         </button>
       ))}
     </div>
