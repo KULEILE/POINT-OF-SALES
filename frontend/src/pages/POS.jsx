@@ -30,22 +30,16 @@ const POS = () => {
   const handleModeChange = (mode) => {
     setSaleMode(mode);
     setSelectedCustomer(null);
-    // Reset wholesale when changing to cash
-    if (mode === 'cash') {
-      setIsWholesale(false);
-    }
+    // Do not reset wholesale when changing mode - let cashier decide
   };
 
   const handleToggleWholesale = () => {
-    if (saleMode === 'cash') {
-      setIsWholesale(!isWholesale);
-      if (!isWholesale) {
-        toast.success('Wholesale mode enabled');
-      } else {
-        toast.success('Retail mode enabled');
-      }
+    // Remove cash-only restriction - wholesale works with all modes
+    setIsWholesale(!isWholesale);
+    if (!isWholesale) {
+      toast.success('Wholesale mode enabled');
     } else {
-      toast.error('Wholesale mode is only available for cash sales');
+      toast.success('Retail mode enabled');
     }
   };
 
@@ -108,7 +102,8 @@ const POS = () => {
 
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
-  const isWholesaleMode = isWholesale && saleMode === 'cash';
+  // Wholesale mode is active when isWholesale is true regardless of sale mode
+  const isWholesaleMode = isWholesale;
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -122,10 +117,7 @@ const POS = () => {
               className={`px-3 py-1.5 rounded-lg text-xs font-600 transition-all border
                 ${isWholesaleMode 
                   ? 'bg-primary text-white border-primary' 
-                  : saleMode === 'cash' 
-                    ? 'bg-surface-card border-surface-border text-text-muted hover:border-primary/50' 
-                    : 'bg-surface-card border-surface-border text-text-faint opacity-50 cursor-not-allowed'}`}
-              disabled={saleMode !== 'cash'}
+                  : 'bg-surface-card border-surface-border text-text-muted hover:border-primary/50'}`}
             >
               {isWholesaleMode ? 'Wholesale' : 'Retail'}
             </button>
@@ -138,7 +130,11 @@ const POS = () => {
         {isWholesaleMode && (
           <div className="bg-primary/10 border border-primary/30 rounded-lg px-4 py-2 flex items-center justify-between">
             <p className="text-xs text-primary font-600">Wholesale Mode Active</p>
-            <p className="text-xs text-text-muted">Products will show wholesale prices</p>
+            <p className="text-xs text-text-muted">
+              {saleMode === 'cash' ? 'Cash sale with wholesale prices' : 
+               saleMode === 'credit' ? 'Credit sale with wholesale prices' : 
+               'Lay-by sale with wholesale prices'}
+            </p>
           </div>
         )}
 
