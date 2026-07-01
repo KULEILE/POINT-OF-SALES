@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { saleService } from '../../services/saleService';
 import { formatCurrency } from '../../utils/formatters';
 import toast from 'react-hot-toast';
+import SplitPaymentModal from './SplitPaymentModal';
 
 const CASH_METHODS = [
   { key: 'cash', label: 'Cash' },
@@ -24,6 +25,8 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
   const [deposit, setDeposit] = useState('');
   const [duration, setDuration] = useState(30);
   const [loading, setLoading] = useState(false);
+  const [showSplitPayment, setShowSplitPayment] = useState(false);
+  const [createdTransaction, setCreatedTransaction] = useState(null);
 
   const isCashSale = saleMode === 'cash';
   const isCreditSale = saleMode === 'credit';
@@ -84,13 +87,65 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
       };
 
       const res = await saleService.create(payload);
-      toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
-      onSuccess(res.data.transaction);
+      
+      // Check if we should show split payment option
+      if (isCashSale && method !== 'cash') {
+        // For card/mobile payments, proceed normally
+        toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
+        onSuccess(res.data.transaction);
+      } else if (isCashSale && method === 'cash') {
+        // For cash payments, proceed normally
+        toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
+        onSuccess(res.data.transaction);
+      } else {
+        // For credit/layby, proceed normally
+        toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
+        onSuccess(res.data.transaction);
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Payment failed. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSplitPaymentClick = async () => {
+    setLoading(true);
+    try {
+      const payload = {
+        items: cart.map(i => ({
+          product_id: i.product_id,
+          quantity: i.quantity,
+          unit_price: i.unit_price || i.selling_price,
+          discount_applied: i.discount_applied || 0,
+          tax_rate: i.tax_rate || 15,
+          tax_exempt: i.tax_exempt || false,
+        })),
+        payment_method: 'split',
+        amount_paid: 0,
+        customer_id: selectedCustomer?.customer_id || null,
+        customer_phone: selectedCustomer?.phone || null,
+        deposit_amount: null,
+        balance_due: 0,
+        duration_days: null,
+        is_wholesale: isWholesale || false,
+        customer_type: isWholesale ? 'wholesale' : 'retail',
+      };
+
+      const res = await saleService.create(payload);
+      setCreatedTransaction(res.data.transaction);
+      setShowSplitPayment(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create transaction for split payment.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSplitSuccess = (data) => {
+    setShowSplitPayment(false);
+    toast.success('Split payment processed successfully.');
+    onSuccess(createdTransaction);
   };
 
   return (
@@ -152,6 +207,20 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
                       <span className="text-sm font-700 text-primary">{formatCurrency(change)}</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Split Payment Button - Only for cash sales */}
+              {isCashSale && (
+                <div className="border-t border-surface-border pt-4">
+                  <button
+                    onClick={handleSplitPaymentClick}
+                    disabled={loading || cart.length === 0}
+                    className={`w-full py-2.5 text-xs font-600 rounded-xl border border-primary/30 text-primary hover:bg-primary/5 transition-all ${(loading || cart.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    Split Payment (Multiple Methods)
+                  </button>
+                  <p className="text-xs text-text-faint text-center mt-1">Pay with multiple payment methods</p>
                 </div>
               )}
             </>
@@ -316,6 +385,19 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
 
         </div>
       </div>
+
+      {/* Split Payment Modal */}
+      {showSplitPayment && createdTransaction && (
+        <SplitPaymentModal
+          total={total}
+          transactionId={createdTransaction.transaction_id}
+          onSuccess={handleSplitSuccess}
+          onClose={() => {
+            setShowSplitPayment(false);
+            setCreatedTransaction(null);
+          }}
+        />
+      )}
     </div>
   );
 };

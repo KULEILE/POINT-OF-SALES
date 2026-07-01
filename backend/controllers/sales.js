@@ -48,7 +48,8 @@ const create = async (req, res) => {
     notes,
     customer_type,
     is_wholesale,
-    wholesale_discount
+    wholesale_discount,
+    payment_splits
   } = req.body;
 
   if (!items || !items.length) {
@@ -87,11 +88,9 @@ const create = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Get wholesale settings
     const settings = await getWholesaleSettings();
     const tiers = await getDiscountTiers();
 
-    // Stock validation and price calculation
     let subtotal = 0, total_tax = 0;
     const processedItems = [];
 
@@ -131,7 +130,6 @@ const create = async (req, res) => {
         });
       }
 
-      // Determine price based on wholesale or retail
       let unitPrice = parseFloat(item.unit_price) || parseFloat(product.selling_price);
       let discountApplied = parseFloat(item.discount_applied) || 0;
 
@@ -157,7 +155,6 @@ const create = async (req, res) => {
 
     const total_amount = subtotal + total_tax;
 
-    // Credit limit validation
     if (payment_method === 'credit' && customer_id) {
       const custCheck = await client.query(
         `SELECT full_name, credit_limit, current_balance FROM customers WHERE customer_id = $1`,
@@ -194,8 +191,7 @@ const create = async (req, res) => {
     const due_date = new Date();
     due_date.setDate(due_date.getDate() + duration);
 
-    // Determine transaction type
-    const transactionType = isWholesale ? 'wholesale' : 'retail';
+    const transactionType = payment_method;
 
     const txResult = await client.query(
       `INSERT INTO transactions (
@@ -238,7 +234,6 @@ const create = async (req, res) => {
     );
     const tx = txResult.rows[0];
 
-    // Insert transaction items
     for (const item of processedItems) {
       await client.query(
         `INSERT INTO transaction_items (
@@ -262,6 +257,17 @@ const create = async (req, res) => {
           (parseFloat(item.unit_price) * parseFloat(item.quantity)).toFixed(2),
         ]
       );
+    }
+
+    // Handle payment splits if provided
+    if (payment_splits && Array.isArray(payment_splits) && payment_splits.length > 0) {
+      for (const split of payment_splits) {
+        await client.query(
+          `INSERT INTO payment_splits (transaction_id, payment_method, amount, reference)
+           VALUES ($1, $2, $3, $4)`,
+          [tx.transaction_id, split.payment_method, parseFloat(split.amount).toFixed(2), split.reference || null]
+        );
+      }
     }
 
     // Handle credit sale
@@ -343,7 +349,7 @@ const create = async (req, res) => {
       user_id: req.user.user_id,
       username: req.user.username,
       action_type: 'SALE',
-      action_details: `${payment_method.toUpperCase()} ${transactionType.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number}`,
+      action_details: `${payment_method.toUpperCase()} ${finalCustomerType.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number}`,
       affected_table: 'transactions',
       affected_record_id: tx.transaction_id,
     });
@@ -353,10 +359,17 @@ const create = async (req, res) => {
       [tx.transaction_id]
     );
 
+    // Get payment splits if any
+    const splits = await client.query(
+      `SELECT * FROM payment_splits WHERE transaction_id = $1`,
+      [tx.transaction_id]
+    );
+
     return res.status(201).json({
       success: true,
       message: 'Sale processed successfully.',
       transaction: final.rows[0],
+      payment_splits: splits.rows
     });
 
   } catch (err) {
@@ -411,6 +424,7 @@ const getById = async (req, res) => {
     if (!tx.rows[0]) {
       return res.status(404).json({ success: false, message: 'Transaction not found.' });
     }
+    
     const items = await pool.query(
       `SELECT ti.*, p.name AS product_name, p.barcode
        FROM transaction_items ti
@@ -418,7 +432,18 @@ const getById = async (req, res) => {
        WHERE ti.transaction_id = $1`,
       [req.params.id]
     );
-    return res.json({ success: true, transaction: tx.rows[0], items: items.rows });
+
+    const splits = await pool.query(
+      `SELECT * FROM payment_splits WHERE transaction_id = $1`,
+      [req.params.id]
+    );
+
+    return res.json({
+      success: true,
+      transaction: tx.rows[0],
+      items: items.rows,
+      payment_splits: splits.rows
+    });
   } catch (err) {
     console.error('[sales/getById]', err.message);
     return res.status(500).json({ success: false, message: 'Server error.' });

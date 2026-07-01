@@ -35,7 +35,6 @@ const processCreditPayment = async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Get customer with credit balance and due date
     const customerResult = await client.query(
       `SELECT c.full_name, c.current_balance, c.phone, 
               t.due_date, t.transaction_id, t.balance_due
@@ -66,7 +65,6 @@ const processCreditPayment = async (req, res) => {
 
     const newBalance = currentBalance - paymentAmount;
 
-    // Check if overdue
     const overdueStatus = isOverdue(customer.due_date);
     const daysInfo = getDaysInfo(customer.due_date);
 
@@ -139,7 +137,6 @@ const processCreditPayment = async (req, res) => {
       [newBalance.toFixed(2), customer_id]
     );
 
-    // If fully paid, update transaction status
     if (newBalance <= 0) {
       await client.query(
         `UPDATE transactions 
@@ -220,7 +217,6 @@ const processLaybyPayment = async (req, res) => {
     const balanceDue = parseFloat(tx.balance_due) || 0;
     const amountPaid = parseFloat(tx.amount_paid) || 0;
 
-    // Check if overdue
     const overdueStatus = isOverdue(tx.due_date);
     const daysInfo = getDaysInfo(tx.due_date);
 
@@ -361,6 +357,112 @@ const processLaybyPayment = async (req, res) => {
   }
 };
 
+const processSplitPayment = async (req, res) => {
+  const { transaction_id, splits } = req.body;
+
+  if (!transaction_id) {
+    return res.status(400).json({ success: false, message: 'Transaction ID is required.' });
+  }
+
+  if (!splits || !Array.isArray(splits) || splits.length === 0) {
+    return res.status(400).json({ success: false, message: 'Payment splits are required.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verify transaction exists
+    const txResult = await client.query(
+      `SELECT total_amount, amount_paid, balance_due FROM transactions WHERE transaction_id = $1`,
+      [transaction_id]
+    );
+
+    if (!txResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Transaction not found.' });
+    }
+
+    const transaction = txResult.rows[0];
+    const totalAmount = parseFloat(transaction.total_amount) || 0;
+    const totalSplitAmount = splits.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
+
+    if (Math.abs(totalSplitAmount - totalAmount) > 0.01) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: `Total split amount (${totalSplitAmount}) does not match transaction total (${totalAmount}).`
+      });
+    }
+
+    // Insert payment splits
+    const insertedSplits = [];
+    for (const split of splits) {
+      const result = await client.query(
+        `INSERT INTO payment_splits (transaction_id, payment_method, amount, reference)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [transaction_id, split.payment_method, parseFloat(split.amount).toFixed(2), split.reference || null]
+      );
+      insertedSplits.push(result.rows[0]);
+    }
+
+    // Update transaction payment status
+    await client.query(
+      `UPDATE transactions 
+       SET amount_paid = $1, 
+           payment_status = 'paid', 
+           updated_at = NOW() 
+       WHERE transaction_id = $2`,
+      [totalAmount.toFixed(2), transaction_id]
+    );
+
+    await client.query('COMMIT');
+
+    await auditLog(pool, {
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'SPLIT_PAYMENT',
+      action_details: `Split payment on transaction ${transaction_id} — ${splits.length} methods`,
+      affected_table: 'payment_splits',
+      affected_record_id: transaction_id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Split payment processed successfully.',
+      splits: insertedSplits,
+      transaction_id: transaction_id
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[payments/processSplitPayment]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to process split payment.' });
+  } finally {
+    client.release();
+  }
+};
+
+const getPaymentSplits = async (req, res) => {
+  try {
+    const transactionId = req.params.id;
+
+    const result = await pool.query(
+      `SELECT * FROM payment_splits WHERE transaction_id = $1 ORDER BY split_id ASC`,
+      [transactionId]
+    );
+
+    return res.json({
+      success: true,
+      splits: result.rows
+    });
+
+  } catch (err) {
+    console.error('[payments/getPaymentSplits]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch payment splits.' });
+  }
+};
+
 const getCustomerPayments = async (req, res) => {
   try {
     const customerId = req.params.id;
@@ -375,7 +477,6 @@ const getCustomerPayments = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
     }
 
-    // Get credit transactions with due date
     const creditPayments = await pool.query(
       `SELECT ct.*, t.receipt_number, t.transaction_date, t.due_date, t.duration_days
        FROM credit_transactions ct
@@ -386,7 +487,6 @@ const getCustomerPayments = async (req, res) => {
       [customerId]
     );
 
-    // Get open layby transactions with due date and days remaining
     const laybyTransactions = await pool.query(
       `SELECT t.transaction_id, t.receipt_number, t.transaction_date, 
               t.total_amount, t.amount_paid, t.balance_due, t.payment_status,
@@ -408,13 +508,23 @@ const getCustomerPayments = async (req, res) => {
       [customerId]
     );
 
-    // Get credit due date from latest credit transaction
     const creditDueDate = await pool.query(
       `SELECT due_date, duration_days 
        FROM transactions 
        WHERE customer_id = $1 AND payment_method = 'credit' AND payment_status = 'pending'
        ORDER BY transaction_date DESC
        LIMIT 1`,
+      [customerId]
+    );
+
+    // Get payment splits for transactions
+    const paymentSplits = await pool.query(
+      `SELECT ps.*, t.receipt_number
+       FROM payment_splits ps
+       JOIN transactions t ON ps.transaction_id = t.transaction_id
+       WHERE t.customer_id = $1
+       ORDER BY ps.created_at DESC
+       LIMIT 50`,
       [customerId]
     );
 
@@ -434,6 +544,7 @@ const getCustomerPayments = async (req, res) => {
         days_remaining: l.due_date ? getDaysInfo(l.due_date) : null
       })),
       layby_payments: laybyPayments.rows,
+      payment_splits: paymentSplits.rows,
       total_credit_balance: parseFloat(customerResult.rows[0].current_balance) || 0,
       open_layby_count: laybyTransactions.rows.length
     });
@@ -477,6 +588,8 @@ const getCustomerLaybys = async (req, res) => {
 module.exports = {
   processCreditPayment,
   processLaybyPayment,
+  processSplitPayment,
+  getPaymentSplits,
   getCustomerPayments,
   getCustomerLaybys
 };
