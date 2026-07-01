@@ -19,9 +19,17 @@ const TransactionSearch = ({ onSelect, onClose }) => {
     try {
       if (searchType === 'receipt') {
         const response = await saleService.getByReceipt(searchValue.trim());
+        console.log('API Response:', response.data); // Debug log
+        
         if (response.data.transaction) {
-          // Pass the transaction with items to the results
-          setResults([response.data.transaction]);
+          // Ensure items are included in the transaction
+          const transactionWithItems = {
+            ...response.data.transaction,
+            items: response.data.items || [],
+            customer_name: response.data.transaction.customer_name || 'Walk-in Customer'
+          };
+          console.log('Transaction with items:', transactionWithItems);
+          setResults([transactionWithItems]);
         } else {
           setResults([]);
           toast.info('No transaction found with that receipt number.');
@@ -37,6 +45,7 @@ const TransactionSearch = ({ onSelect, onClose }) => {
         }
       }
     } catch (err) {
+      console.error('Search error:', err);
       toast.error(err.response?.data?.message || 'Search failed. Please try again.');
       setResults([]);
     } finally {
@@ -45,7 +54,13 @@ const TransactionSearch = ({ onSelect, onClose }) => {
   };
 
   const handleSelect = (transaction) => {
-    onSelect(transaction);
+    console.log('Selected transaction:', transaction);
+    // Make sure items are included
+    const transactionWithItems = {
+      ...transaction,
+      items: transaction.items || []
+    };
+    onSelect(transactionWithItems);
   };
 
   return (
@@ -127,6 +142,7 @@ const TransactionSearch = ({ onSelect, onClose }) => {
                         <p className="font-600 text-text-primary text-sm">{tx.receipt_number}</p>
                         <p className="text-xs text-text-muted">{formatDateTime(tx.transaction_date)}</p>
                         <p className="text-xs text-text-muted">Customer: {tx.customer_name || 'Walk-in'}</p>
+                        <p className="text-xs text-text-muted">Items: {tx.items?.length || 0}</p>
                       </div>
                       <div className="text-right">
                         <p className="font-700 text-primary">{formatCurrency(tx.total_amount)}</p>
