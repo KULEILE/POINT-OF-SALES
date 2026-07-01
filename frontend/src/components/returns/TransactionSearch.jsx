@@ -17,17 +17,16 @@ const TransactionSearch = ({ onSelect, onClose }) => {
 
     setLoading(true);
     try {
-      // Search by receipt number
       if (searchType === 'receipt') {
         const response = await saleService.getByReceipt(searchValue.trim());
         if (response.data.transaction) {
+          // Pass the transaction with items to the results
           setResults([response.data.transaction]);
         } else {
           setResults([]);
           toast.info('No transaction found with that receipt number.');
         }
       } else {
-        // Search by customer name
         const response = await saleService.getAll({ 
           search: searchValue.trim(), 
           limit: 10 
@@ -60,7 +59,6 @@ const TransactionSearch = ({ onSelect, onClose }) => {
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Search Type */}
           <div>
             <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">Search By</p>
             <div className="grid grid-cols-2 gap-2">
@@ -87,7 +85,6 @@ const TransactionSearch = ({ onSelect, onClose }) => {
             </div>
           </div>
 
-          {/* Search Input */}
           <div>
             <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">
               {searchType === 'receipt' ? 'Receipt Number' : 'Customer Name'}
@@ -103,7 +100,6 @@ const TransactionSearch = ({ onSelect, onClose }) => {
             />
           </div>
 
-          {/* Search Button */}
           <button
             onClick={handleSearch}
             disabled={loading}
@@ -113,7 +109,6 @@ const TransactionSearch = ({ onSelect, onClose }) => {
           </button>
         </div>
 
-        {/* Results */}
         <div className="flex-1 overflow-y-auto px-5 pb-5">
           {results.length > 0 && (
             <div>

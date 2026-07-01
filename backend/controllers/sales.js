@@ -480,20 +480,48 @@ const getByReceipt = async (req, res) => {
        WHERE t.receipt_number = $1`,
       [req.params.receipt_number]
     );
+    
     if (!result.rows[0]) {
       return res.status(404).json({
         success: false,
         message: 'Transaction not found. Please check the receipt number and try again.'
       });
     }
-    
+
+    // Get transaction items with product details
     const items = await pool.query(
-      `SELECT ti.*, p.name AS product_name, p.barcode
+      `SELECT 
+        ti.item_id,
+        ti.transaction_id,
+        ti.product_id,
+        ti.quantity,
+        ti.unit_type,
+        ti.unit_price,
+        ti.cost_at_sale,
+        ti.discount_applied,
+        ti.tax_rate,
+        ti.tax_exempt,
+        ti.taxable_amount,
+        ti.tax_amount,
+        ti.total_price,
+        ti.created_at,
+        p.name AS product_name,
+        p.barcode,
+        p.sku
        FROM transaction_items ti
        JOIN products p ON ti.product_id = p.product_id
-       WHERE ti.transaction_id = $1`,
+       WHERE ti.transaction_id = $1
+       ORDER BY ti.item_id ASC`,
       [result.rows[0].transaction_id]
     );
+
+    // Check if there are items to return
+    if (items.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'This receipt has no items to return. Please enter a sales receipt number (not a payment receipt).'
+      });
+    }
 
     const splits = await pool.query(
       `SELECT * FROM payment_splits WHERE transaction_id = $1`,
@@ -506,6 +534,7 @@ const getByReceipt = async (req, res) => {
       items: items.rows,
       payment_splits: splits.rows
     });
+
   } catch (err) {
     console.error('[sales/getByReceipt]', err.message);
     return res.status(500).json({

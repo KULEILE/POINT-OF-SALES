@@ -15,7 +15,7 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
       setSelectedItems(
         transaction.items.map(item => ({
           ...item,
-          return_quantity: item.quantity,
+          return_quantity: parseFloat(item.quantity) || 0,
           selected: true
         }))
       );
@@ -28,7 +28,7 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
     if (!newItems[index].selected) {
       newItems[index].return_quantity = 0;
     } else {
-      newItems[index].return_quantity = newItems[index].quantity;
+      newItems[index].return_quantity = parseFloat(newItems[index].quantity) || 0;
     }
     setSelectedItems(newItems);
   };
@@ -36,7 +36,8 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
   const updateQuantity = (index, value) => {
     const newItems = [...selectedItems];
     const qty = parseFloat(value) || 0;
-    if (qty <= newItems[index].quantity && qty >= 0) {
+    const maxQty = parseFloat(newItems[index].quantity) || 0;
+    if (qty <= maxQty && qty >= 0) {
       newItems[index].return_quantity = qty;
       if (qty > 0) {
         newItems[index].selected = true;
@@ -45,14 +46,14 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
       }
       setSelectedItems(newItems);
     } else {
-      toast.error(`Quantity cannot exceed ${newItems[index].quantity}`);
+      toast.error(`Quantity cannot exceed ${maxQty}`);
     }
   };
 
   const calculateTotal = () => {
     return selectedItems
       .filter(item => item.selected && item.return_quantity > 0)
-      .reduce((sum, item) => sum + (item.unit_price * item.return_quantity), 0);
+      .reduce((sum, item) => sum + (parseFloat(item.unit_price) || 0) * item.return_quantity, 0);
   };
 
   const handleSubmit = async () => {
