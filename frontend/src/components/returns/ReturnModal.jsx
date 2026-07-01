@@ -10,8 +10,10 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (transaction && transaction.items) {
-      // Initialize selected items with all items checked
+    console.log('Transaction received in ReturnModal:', transaction);
+    console.log('Items:', transaction?.items);
+    
+    if (transaction && transaction.items && transaction.items.length > 0) {
       setSelectedItems(
         transaction.items.map(item => ({
           ...item,
@@ -19,6 +21,8 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
           selected: true
         }))
       );
+    } else {
+      toast.error('No items found in this transaction.');
     }
   }, [transaction]);
 
@@ -126,40 +130,46 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
           {/* Items List */}
           <div>
             <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">Select Items to Return</p>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {selectedItems.map((item, index) => (
-                <div key={index} className="bg-surface-bg border border-surface-border rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 flex-1">
-                      <input
-                        type="checkbox"
-                        checked={item.selected}
-                        onChange={() => toggleItem(index)}
-                        className="w-4 h-4 rounded border-surface-border text-primary focus:ring-primary"
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-500 text-text-primary">{item.product_name}</p>
-                        <p className="text-xs text-text-muted">
-                          {formatCurrency(item.unit_price)} × {item.quantity} units
-                        </p>
+            {selectedItems.length === 0 ? (
+              <div className="bg-surface-bg border border-surface-border rounded-lg p-4 text-center text-text-muted">
+                No items available to return.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {selectedItems.map((item, index) => (
+                  <div key={index} className="bg-surface-bg border border-surface-border rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={item.selected}
+                          onChange={() => toggleItem(index)}
+                          className="w-4 h-4 rounded border-surface-border text-primary focus:ring-primary"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-500 text-text-primary">{item.product_name || 'Unknown Product'}</p>
+                          <p className="text-xs text-text-muted">
+                            {formatCurrency(item.unit_price)} × {item.quantity} units
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-muted">Return:</span>
+                        <input
+                          type="number"
+                          className="w-16 bg-surface-card border border-surface-border rounded-md px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+                          value={item.return_quantity}
+                          onChange={(e) => updateQuantity(index, e.target.value)}
+                          min="0"
+                          max={item.quantity}
+                          disabled={!item.selected}
+                        />
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-muted">Return:</span>
-                      <input
-                        type="number"
-                        className="w-16 bg-surface-card border border-surface-border rounded-md px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-                        value={item.return_quantity}
-                        onChange={(e) => updateQuantity(index, e.target.value)}
-                        min="0"
-                        max={item.quantity}
-                        disabled={!item.selected}
-                      />
-                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Refund Method */}
