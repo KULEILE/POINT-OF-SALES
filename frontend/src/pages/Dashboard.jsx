@@ -85,10 +85,9 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Alerts Section - Only shows when there are alerts */}
+      {/* Alerts Section */}
       {(hasExpired || hasLowStock) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Expired Products Alert */}
           {hasExpired && (
             <div className="k-card border-danger/30 bg-danger/5">
               <h3 className="text-sm font-700 text-danger mb-2">Expired Products Alert</h3>
@@ -109,7 +108,6 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Low Stock Alert */}
           {hasLowStock && (
             <div className="k-card border-warning/30 bg-warning/5">
               <h3 className="text-sm font-700 text-warning mb-2">Low Stock Alert</h3>
@@ -117,68 +115,39 @@ const Dashboard = () => {
                 {lowStockProducts.length} product(s) are running low.
               </p>
               <ul className="mt-2 space-y-1">
-                {lowStockProducts.slice(0, 3).map(p => (
+                {lowStockProducts.map(p => (
                   <li key={p.product_id} className="text-sm flex justify-between">
                     <span>{p.name}</span>
                     <span className="text-warning font-600">{p.stock_quantity} units left</span>
                   </li>
                 ))}
-                {lowStockProducts.length > 3 && (
-                  <li className="text-sm text-text-faint">+{lowStockProducts.length - 3} more low stock items</li>
-                )}
               </ul>
             </div>
           )}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Selling Products */}
-        <div className="k-card">
-          <h3 className="text-sm font-700 text-text-primary mb-4">Top Selling Products</h3>
-          {topProds.length === 0 ? (
-            <p className="text-sm text-text-faint">No sales data available yet</p>
-          ) : (
-            <div className="space-y-3">
-              {topProds.map((p, i) => (
-                <div key={p.product_id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-700 text-text-faint w-5">{i + 1}</span>
-                    <div>
-                      <p className="text-sm font-500 text-text-primary">{p.name}</p>
-                      <p className="text-xs text-text-muted">{p.total_qty_sold} units sold</p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-700 text-primary">{formatCurrency(p.total_revenue)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Low Stock Alerts - Bottom Section */}
-        <div className="k-card">
-          <h3 className="text-sm font-700 text-text-primary mb-4">Low Stock Alerts</h3>
-          {lowStockProducts.length === 0 ? (
-            <p className="text-sm text-success">All stock levels are healthy</p>
-          ) : (
-            <div className="space-y-3">
-              {lowStockProducts.slice(0, 5).map(p => (
-                <div key={p.product_id} className="flex items-center justify-between">
+      {/* Top Selling Products - Full Width */}
+      <div className="k-card">
+        <h3 className="text-sm font-700 text-text-primary mb-4">Top Selling Products</h3>
+        {topProds.length === 0 ? (
+          <p className="text-sm text-text-faint">No sales data available yet</p>
+        ) : (
+          <div className="space-y-3">
+            {topProds.map((p, i) => (
+              <div key={p.product_id} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-700 text-text-faint w-5">{i + 1}</span>
                   <div>
                     <p className="text-sm font-500 text-text-primary">{p.name}</p>
-                    <p className="text-xs text-text-muted">
-                      Min stock: {p.min_stock || 5}
-                    </p>
+                    <p className="text-xs text-text-muted">{p.total_qty_sold} units sold</p>
                   </div>
-                  <span className="text-xs font-700 text-warning">
-                    {p.stock_quantity <= 0 ? 'OUT OF STOCK' : `${p.stock_quantity} left`}
-                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <p className="text-sm font-700 text-primary">{formatCurrency(p.total_revenue)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
