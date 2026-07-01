@@ -55,9 +55,18 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
 
   const handleProcess = async () => {
     if (!canSubmit) {
-      if (isCashSale && method === 'cash') toast.error('Amount paid is less than total');
-      if (isLaybySale && depositAmt <= 0) toast.error('Please enter a deposit amount');
-      if (isLaybySale && depositAmt > total) toast.error('Deposit cannot exceed total');
+      if (isCashSale && method === 'cash') {
+        toast.error('The amount entered is less than the total. Please enter the full amount.');
+        return;
+      }
+      if (isLaybySale && depositAmt <= 0) {
+        toast.error('Please enter a deposit amount to complete the lay-by sale.');
+        return;
+      }
+      if (isLaybySale && depositAmt > total) {
+        toast.error('Deposit amount cannot exceed the total sale amount.');
+        return;
+      }
       return;
     }
 
@@ -87,21 +96,8 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
       };
 
       const res = await saleService.create(payload);
-      
-      // Check if we should show split payment option
-      if (isCashSale && method !== 'cash') {
-        // For card/mobile payments, proceed normally
-        toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
-        onSuccess(res.data.transaction);
-      } else if (isCashSale && method === 'cash') {
-        // For cash payments, proceed normally
-        toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
-        onSuccess(res.data.transaction);
-      } else {
-        // For credit/layby, proceed normally
-        toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
-        onSuccess(res.data.transaction);
-      }
+      toast.success(`Sale complete! Receipt: ${res.data.transaction.receipt_number}`);
+      onSuccess(res.data.transaction);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Payment failed. Please try again.');
     } finally {
@@ -136,7 +132,7 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
       setCreatedTransaction(res.data.transaction);
       setShowSplitPayment(true);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to create transaction for split payment.');
+      toast.error(err.response?.data?.message || 'Failed to create transaction for split payment. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -210,7 +206,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
                 </div>
               )}
 
-              {/* Split Payment Button - Only for cash sales */}
               {isCashSale && (
                 <div className="border-t border-surface-border pt-4">
                   <button
@@ -386,7 +381,6 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
         </div>
       </div>
 
-      {/* Split Payment Modal */}
       {showSplitPayment && createdTransaction && (
         <SplitPaymentModal
           total={total}

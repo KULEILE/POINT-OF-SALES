@@ -90,6 +90,7 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/sales', require('./routes/sales'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/returns', require('./routes/returns'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/reports', require('./routes/reports'));
@@ -113,6 +114,7 @@ app.get('/', (req, res) => {
       sales: '/api/sales',
       customers: '/api/customers',
       payments: '/api/payments',
+      returns: '/api/returns',
       inventory: '/api/inventory',
       suppliers: '/api/suppliers',
       reports: '/api/reports',
@@ -139,6 +141,7 @@ app.use((req, res) => {
       '/api/sales',
       '/api/customers',
       '/api/payments',
+      '/api/returns',
       '/api/inventory',
       '/api/suppliers',
       '/api/reports',

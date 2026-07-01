@@ -53,10 +53,16 @@ const create = async (req, res) => {
   } = req.body;
 
   if (!items || !items.length) {
-    return res.status(400).json({ success: false, message: 'Cart is empty.' });
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Your cart is empty. Please add items before processing the sale.' 
+    });
   }
   if (!payment_method) {
-    return res.status(400).json({ success: false, message: 'Payment method is required.' });
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Please select a payment method before processing the sale.' 
+    });
   }
 
   const isWholesale = is_wholesale || false;
@@ -65,14 +71,14 @@ const create = async (req, res) => {
   if ((payment_method === 'credit' || payment_method === 'layby') && !customer_id) {
     return res.status(400).json({
       success: false,
-      message: `A customer account is required for ${payment_method} sales.`,
+      message: `A customer account is required for ${payment_method} sales. Please select a customer first.`,
     });
   }
 
   if ((payment_method === 'credit' || payment_method === 'layby') && !duration_days) {
     return res.status(400).json({
       success: false,
-      message: 'Please enter the payment duration in days.',
+      message: 'Please enter the payment duration in days before completing the sale.',
     });
   }
 
@@ -80,7 +86,7 @@ const create = async (req, res) => {
   if (duration <= 0) {
     return res.status(400).json({
       success: false,
-      message: 'Duration must be greater than 0 days.',
+      message: 'Duration must be greater than 0 days. Please select a valid duration.',
     });
   }
 
@@ -102,7 +108,10 @@ const create = async (req, res) => {
       
       if (!stockCheck.rows[0]) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, message: `Product not found: ${item.product_id}` });
+        return res.status(400).json({ 
+          success: false, 
+          message: `Product not found. Please refresh the page and try again.` 
+        });
       }
       
       const product = stockCheck.rows[0];
@@ -117,7 +126,7 @@ const create = async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({
             success: false,
-            message: `Cannot sell "${product.name}". This product expired on ${new Date(product.expiry_date).toLocaleDateString()}.`
+            message: `Cannot sell "${product.name}". This product expired on ${new Date(product.expiry_date).toLocaleDateString()}. Please remove it from stock.`
           });
         }
       }
@@ -126,7 +135,7 @@ const create = async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({
           success: false,
-          message: `Insufficient stock for "${product.name}". Available: ${available}, Requested: ${requested}`,
+          message: `Insufficient stock for "${product.name}". Only ${available} units available, but you requested ${requested} units.`,
         });
       }
 
@@ -168,7 +177,7 @@ const create = async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({
             success: false,
-            message: `Credit limit exceeded for ${custCheck.rows[0].full_name}. Available credit: M ${available_credit.toFixed(2)}, Sale total: M ${total_amount.toFixed(2)}`,
+            message: `Credit limit exceeded for ${custCheck.rows[0].full_name}. Available credit is ${formatCurrency(available_credit)}, but the sale total is ${formatCurrency(total_amount)}.`,
           });
         }
       }
@@ -259,7 +268,6 @@ const create = async (req, res) => {
       );
     }
 
-    // Handle payment splits if provided
     if (payment_splits && Array.isArray(payment_splits) && payment_splits.length > 0) {
       for (const split of payment_splits) {
         await client.query(
@@ -270,7 +278,6 @@ const create = async (req, res) => {
       }
     }
 
-    // Handle credit sale
     if (payment_method === 'credit' && customer_id) {
       const cust = await client.query(
         `SELECT current_balance FROM customers WHERE customer_id = $1`,
@@ -302,7 +309,6 @@ const create = async (req, res) => {
       );
     }
 
-    // Handle lay-by sale
     if (payment_method === 'layby' && customer_id) {
       if (deposit > 0) {
         await client.query(
@@ -359,7 +365,6 @@ const create = async (req, res) => {
       [tx.transaction_id]
     );
 
-    // Get payment splits if any
     const splits = await client.query(
       `SELECT * FROM payment_splits WHERE transaction_id = $1`,
       [tx.transaction_id]
@@ -375,7 +380,10 @@ const create = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[sales/create]', err.message);
-    return res.status(500).json({ success: false, message: 'Failed to process sale.' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to process sale. Please try again or contact support.' 
+    });
   } finally {
     client.release();
   }
@@ -408,7 +416,10 @@ const getAll = async (req, res) => {
     return res.json({ success: true, sales: result.rows, count: result.rowCount });
   } catch (err) {
     console.error('[sales/getAll]', err.message);
-    return res.status(500).json({ success: false, message: 'Failed to fetch sales.' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Unable to load sales. Please try again later.' 
+    });
   }
 };
 
@@ -422,7 +433,10 @@ const getById = async (req, res) => {
       [req.params.id]
     );
     if (!tx.rows[0]) {
-      return res.status(404).json({ success: false, message: 'Transaction not found.' });
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Transaction not found. Please check the transaction ID and try again.' 
+      });
     }
     
     const items = await pool.query(
@@ -446,7 +460,10 @@ const getById = async (req, res) => {
     });
   } catch (err) {
     console.error('[sales/getById]', err.message);
-    return res.status(500).json({ success: false, message: 'Server error.' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Unable to load transaction details. Please try again.' 
+    });
   }
 };
 
@@ -471,7 +488,10 @@ const todaySummary = async (req, res) => {
     return res.json({ success: true, summary: result.rows[0] });
   } catch (err) {
     console.error('[sales/todaySummary]', err.message);
-    return res.status(500).json({ success: false, message: 'Server error.' });
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Unable to load today\'s sales summary. Please try again.' 
+    });
   }
 };
 

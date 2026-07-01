@@ -8,6 +8,8 @@ import ModeSwitch from '../components/layout/ModeSwitch';
 import CustomerPanel from '../components/pos/CustomerPanel';
 import SettlementModal from '../components/payments/SettlementModal';
 import CustomerSelectModal from '../components/payments/CustomerSelectModal';
+import TransactionSearch from '../components/returns/TransactionSearch';
+import ReturnModal from '../components/returns/ReturnModal';
 import { useCart } from '../context/CartContext';
 import { validateCartStock } from '../utils/validators';
 
@@ -26,6 +28,9 @@ const POS = () => {
   const [showSettlement, setShowSettlement] = useState(false);
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
   const [settlementCustomer, setSettlementCustomer] = useState(null);
+  const [showTransactionSearch, setShowTransactionSearch] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [showReturnModal, setShowReturnModal] = useState(false);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
@@ -98,6 +103,23 @@ const POS = () => {
     setShowSettlement(true);
   };
 
+  // Return/Refund handlers
+  const handleOpenReturn = () => {
+    setShowTransactionSearch(true);
+  };
+
+  const handleTransactionSelect = (transaction) => {
+    setSelectedTransaction(transaction);
+    setShowTransactionSearch(false);
+    setShowReturnModal(true);
+  };
+
+  const handleReturnSuccess = () => {
+    setShowReturnModal(false);
+    setSelectedTransaction(null);
+    toast.success('Return processed successfully.');
+  };
+
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
   const isWholesaleMode = isWholesale;
@@ -119,9 +141,14 @@ const POS = () => {
               {isWholesaleMode ? 'Wholesale' : 'Retail'}
             </button>
           </div>
-          <button onClick={handleOpenSettlement} className="k-btn-outline text-sm px-4 py-2">
-            Settle Debt
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleOpenReturn} className="k-btn-outline text-sm px-4 py-2">
+              Return
+            </button>
+            <button onClick={handleOpenSettlement} className="k-btn-outline text-sm px-4 py-2">
+              Settle Debt
+            </button>
+          </div>
         </div>
 
         {isWholesaleMode && (
@@ -210,6 +237,25 @@ const POS = () => {
             setSettlementCustomer(null);
           }}
           onSuccess={handleSettlementSuccess}
+        />
+      )}
+
+      {/* Return Modals */}
+      {showTransactionSearch && (
+        <TransactionSearch
+          onSelect={handleTransactionSelect}
+          onClose={() => setShowTransactionSearch(false)}
+        />
+      )}
+
+      {showReturnModal && selectedTransaction && (
+        <ReturnModal
+          transaction={selectedTransaction}
+          onSuccess={handleReturnSuccess}
+          onClose={() => {
+            setShowReturnModal(false);
+            setSelectedTransaction(null);
+          }}
         />
       )}
     </div>
