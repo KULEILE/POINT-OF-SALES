@@ -36,6 +36,10 @@ const calculateWholesalePrice = (product, quantity, settings, tiers) => {
   return { unitPrice, discount, discountedPrice };
 };
 
+const formatCurrency = (amount) => {
+  return `M ${parseFloat(amount || 0).toFixed(2)}`;
+};
+
 const create = async (req, res) => {
   const {
     items,
@@ -467,6 +471,50 @@ const getById = async (req, res) => {
   }
 };
 
+const getByReceipt = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT t.*, u.full_name AS cashier_full
+       FROM transactions t
+       LEFT JOIN users u ON t.cashier_id = u.user_id
+       WHERE t.receipt_number = $1`,
+      [req.params.receipt_number]
+    );
+    if (!result.rows[0]) {
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found. Please check the receipt number and try again.'
+      });
+    }
+    
+    const items = await pool.query(
+      `SELECT ti.*, p.name AS product_name, p.barcode
+       FROM transaction_items ti
+       JOIN products p ON ti.product_id = p.product_id
+       WHERE ti.transaction_id = $1`,
+      [result.rows[0].transaction_id]
+    );
+
+    const splits = await pool.query(
+      `SELECT * FROM payment_splits WHERE transaction_id = $1`,
+      [result.rows[0].transaction_id]
+    );
+
+    return res.json({
+      success: true,
+      transaction: result.rows[0],
+      items: items.rows,
+      payment_splits: splits.rows
+    });
+  } catch (err) {
+    console.error('[sales/getByReceipt]', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load transaction. Please try again.'
+    });
+  }
+};
+
 const todaySummary = async (req, res) => {
   try {
     const result = await pool.query(
@@ -495,4 +543,4 @@ const todaySummary = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll, getById, todaySummary };
+module.exports = { create, getAll, getById, getByReceipt, todaySummary };

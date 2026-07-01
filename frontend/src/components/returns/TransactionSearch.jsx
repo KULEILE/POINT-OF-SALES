@@ -19,7 +19,7 @@ const TransactionSearch = ({ onSelect, onClose }) => {
     try {
       // Search by receipt number
       if (searchType === 'receipt') {
-        const response = await saleService.getById(searchValue.trim());
+        const response = await saleService.getByReceipt(searchValue.trim());
         if (response.data.transaction) {
           setResults([response.data.transaction]);
         } else {
@@ -27,7 +27,7 @@ const TransactionSearch = ({ onSelect, onClose }) => {
           toast.info('No transaction found with that receipt number.');
         }
       } else {
-        // Search by customer name - use customers API
+        // Search by customer name
         const response = await saleService.getAll({ 
           search: searchValue.trim(), 
           limit: 10 
