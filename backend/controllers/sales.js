@@ -394,7 +394,7 @@ const create = async (req, res) => {
 };
 
 const getAll = async (req, res) => {
-  const { date_from, date_to, cashier_id, payment_method, status, customer_type, page = 1, limit = 20 } = req.query;
+  const { date_from, date_to, cashier_id, payment_method, status, customer_type, search, page = 1, limit = 20 } = req.query;
   const { limit: lim, offset } = paginate(page, limit);
 
   try {
@@ -402,8 +402,12 @@ const getAll = async (req, res) => {
       SELECT t.transaction_id, t.receipt_number, t.transaction_date,
              t.payment_method, t.total_amount, t.status, t.payment_status,
              t.cashier_name, t.customer_phone, t.is_guest,
-             t.duration_days, t.due_date, t.customer_type
-      FROM transactions t WHERE 1=1`;
+             t.duration_days, t.due_date, t.customer_type,
+             c.full_name AS customer_name,
+             (SELECT COUNT(*) FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id) AS item_count
+      FROM transactions t
+      LEFT JOIN customers c ON t.customer_id = c.customer_id
+      WHERE 1=1`;
     const params = [];
 
     if (date_from) { params.push(date_from); q += ` AND DATE(t.transaction_date) >= $${params.length}`; }
@@ -412,12 +416,33 @@ const getAll = async (req, res) => {
     if (payment_method) { params.push(payment_method); q += ` AND t.payment_method = $${params.length}`; }
     if (status) { params.push(status); q += ` AND t.status = $${params.length}`; }
     if (customer_type) { params.push(customer_type); q += ` AND t.customer_type = $${params.length}`; }
+    if (search) {
+      params.push(`%${search}%`);
+      q += ` AND (c.full_name ILIKE $${params.length} OR t.receipt_number ILIKE $${params.length})`;
+    }
 
     q += ` ORDER BY t.transaction_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(lim, offset);
 
     const result = await pool.query(q, params);
-    return res.json({ success: true, sales: result.rows, count: result.rowCount });
+    
+    // Get items for each transaction
+    const salesWithItems = [];
+    for (const sale of result.rows) {
+      const items = await pool.query(
+        `SELECT ti.*, p.name AS product_name
+         FROM transaction_items ti
+         JOIN products p ON ti.product_id = p.product_id
+         WHERE ti.transaction_id = $1`,
+        [sale.transaction_id]
+      );
+      salesWithItems.push({
+        ...sale,
+        items: items.rows
+      });
+    }
+
+    return res.json({ success: true, sales: salesWithItems, count: result.rowCount });
   } catch (err) {
     console.error('[sales/getAll]', err.message);
     return res.status(500).json({ 
