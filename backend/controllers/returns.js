@@ -4,7 +4,6 @@ const { auditLog } = require('../utils/helpers');
 const getReturnSettings = async () => {
   const result = await pool.query(`SELECT * FROM return_settings LIMIT 1`);
   if (!result.rows[0]) {
-    // Insert default settings
     await pool.query(`
       INSERT INTO return_settings (
         return_window_days,
@@ -35,13 +34,18 @@ const getReturnSettings = async () => {
   return result.rows[0];
 };
 
+const formatCurrency = (amount) => {
+  return `M ${parseFloat(amount || 0).toFixed(2)}`;
+};
+
 const create = async (req, res) => {
   const {
     original_transaction_id,
     customer_id,
     items,
     refund_method,
-    reason
+    reason,
+    notes
   } = req.body;
 
   if (!original_transaction_id) {
@@ -84,7 +88,7 @@ const create = async (req, res) => {
 
     const transaction = txResult.rows[0];
 
-    // Check if return already exists
+    // Check if return already exists for this transaction
     const existingReturn = await client.query(
       `SELECT return_id FROM returns WHERE original_transaction_id = $1`,
       [original_transaction_id]
@@ -223,24 +227,53 @@ const create = async (req, res) => {
       }
     }
 
+    // Generate return receipt number
+    const counterResult = await client.query(
+      `INSERT INTO receipt_counter (counter_date, last_number)
+       VALUES (CURRENT_DATE, 1)
+       ON CONFLICT (counter_date)
+       DO UPDATE SET last_number = receipt_counter.last_number + 1
+       RETURNING last_number`,
+      []
+    );
+
+    const counter = counterResult.rows[0].last_number;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const returnReceiptNumber = 'RTN-' + dateStr + '-' + String(counter).padStart(4, '0');
+
+    // Apply restocking fee if applicable
+    let finalRefund = totalRefund;
+    if (settings.restocking_fee_percentage > 0) {
+      const restockingFee = totalRefund * (settings.restocking_fee_percentage / 100);
+      finalRefund = totalRefund - restockingFee;
+    }
+
     // Create return record
     const returnResult = await client.query(
       `INSERT INTO returns (
         original_transaction_id,
+        return_receipt_number,
+        cashier_id,
+        cashier_name,
         customer_id,
+        customer_phone,
         refund_amount,
         refund_method,
         reason,
-        processed_by,
+        notes,
         status
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'completed') RETURNING *`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'completed') RETURNING *`,
       [
         original_transaction_id,
+        returnReceiptNumber,
+        req.user.user_id,
+        req.user.full_name,
         customer_id || transaction.customer_id || null,
-        totalRefund.toFixed(2),
+        transaction.phone || null,
+        finalRefund.toFixed(2),
         refund_method || 'cash',
         reason || 'Customer return',
-        req.user.user_id
+        notes || null
       ]
     );
 
@@ -291,20 +324,6 @@ const create = async (req, res) => {
       );
     }
 
-    // Apply restocking fee if applicable
-    let finalRefund = totalRefund;
-    if (settings.restocking_fee_percentage > 0) {
-      const restockingFee = totalRefund * (settings.restocking_fee_percentage / 100);
-      finalRefund = totalRefund - restockingFee;
-    }
-
-    // Update return with final refund amount
-    await client.query(
-      `UPDATE returns SET refund_amount = $1 WHERE return_id = $2`,
-      [finalRefund.toFixed(2), returnRecord.return_id]
-    );
-    returnRecord.refund_amount = finalRefund;
-
     await client.query('COMMIT');
 
     await auditLog(pool, {
@@ -323,6 +342,7 @@ const create = async (req, res) => {
       items: processedItems,
       refund_total: finalRefund,
       restocking_fee: totalRefund - finalRefund,
+      return_receipt: returnReceiptNumber,
       settings: {
         return_window_days: settings.return_window_days,
         restocking_fee_percentage: settings.restocking_fee_percentage
@@ -349,7 +369,7 @@ const getByTransaction = async (req, res) => {
       `SELECT r.*, u.full_name AS processed_by_name,
               (SELECT COUNT(*) FROM return_items ri WHERE ri.return_id = r.return_id) AS item_count
        FROM returns r
-       LEFT JOIN users u ON r.processed_by = u.user_id
+       LEFT JOIN users u ON r.cashier_id = u.user_id
        WHERE r.original_transaction_id = $1
        ORDER BY r.created_at DESC`,
       [transactionId]
@@ -378,7 +398,7 @@ const getById = async (req, res) => {
               t.receipt_number AS original_receipt,
               c.full_name AS customer_name
        FROM returns r
-       LEFT JOIN users u ON r.processed_by = u.user_id
+       LEFT JOIN users u ON r.cashier_id = u.user_id
        LEFT JOIN transactions t ON r.original_transaction_id = t.transaction_id
        LEFT JOIN customers c ON r.customer_id = c.customer_id
        WHERE r.return_id = $1`,
@@ -456,7 +476,7 @@ const getAll = async (req, res) => {
       FROM returns r
       LEFT JOIN transactions t ON r.original_transaction_id = t.transaction_id
       LEFT JOIN customers c ON r.customer_id = c.customer_id
-      LEFT JOIN users u ON r.processed_by = u.user_id
+      LEFT JOIN users u ON r.cashier_id = u.user_id
       WHERE 1=1
     `;
     const params = [];
@@ -488,11 +508,6 @@ const getAll = async (req, res) => {
       message: 'Unable to load returns. Please try again later.'
     });
   }
-};
-
-// Helper function for formatting currency (if not imported)
-const formatCurrency = (amount) => {
-  return `M ${parseFloat(amount || 0).toFixed(2)}`;
 };
 
 module.exports = {

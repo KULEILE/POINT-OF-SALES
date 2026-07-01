@@ -7,6 +7,7 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
   const [selectedItems, setSelectedItems] = useState([]);
   const [refundMethod, setRefundMethod] = useState('cash');
   const [reason, setReason] = useState('');
+  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -77,17 +78,27 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
     try {
       const payload = {
         original_transaction_id: transaction.transaction_id,
-        customer_id: transaction.customer_id,
+        customer_id: transaction.customer_id || null,
         items: itemsToReturn,
         refund_method: refundMethod,
-        reason: reason || 'Customer return'
+        reason: reason || 'Customer return',
+        notes: notes || ''
       };
 
+      console.log('Return payload:', payload);
+
       const response = await returnService.create(payload);
-      toast.success(response.data.message || 'Return processed successfully.');
-      onSuccess(response.data);
+      
+      if (response.data.success) {
+        toast.success(response.data.message || 'Return processed successfully.');
+        onSuccess(response.data);
+      } else {
+        toast.error(response.data.message || 'Failed to process return.');
+      }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to process return. Please try again.');
+      console.error('Return error:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to process return. Please try again or contact support.';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -98,6 +109,7 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
   }
 
   const totalRefund = calculateTotal();
+  const itemCount = selectedItems.filter(item => item.selected && item.return_quantity > 0).length;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -204,6 +216,18 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
             </select>
           </div>
 
+          {/* Notes */}
+          <div>
+            <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">Notes (Optional)</p>
+            <input
+              type="text"
+              className="k-input"
+              placeholder="Additional notes..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
           {/* Summary */}
           <div className="bg-surface-bg border border-surface-border rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm">
@@ -212,9 +236,7 @@ const ReturnModal = ({ transaction, onSuccess, onClose }) => {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-text-muted">Items to Return</span>
-              <span className="font-600">
-                {selectedItems.filter(item => item.selected && item.return_quantity > 0).length}
-              </span>
+              <span className="font-600">{itemCount}</span>
             </div>
           </div>
 
