@@ -97,6 +97,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/holds', require('./routes/holds'));
 
 // ============================================================
 // ROOT ROUTE

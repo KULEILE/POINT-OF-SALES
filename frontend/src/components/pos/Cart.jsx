@@ -13,7 +13,8 @@ const Cart = ({
   onUpdateDiscount, 
   onClear, 
   onCheckout,
-  isWholesale 
+  isWholesale,
+  onHold 
 }) => (
   <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
     <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
@@ -24,11 +25,19 @@ const Cart = ({
           <span className="text-xs text-primary font-600">Wholesale Mode</span>
         )}
       </div>
-      {cart.length > 0 && (
+      <div className="flex gap-2">
+        {cart.length > 0 && (
+          <button 
+            onClick={onHold}
+            className="text-xs text-primary border border-primary/30 hover:border-primary px-2 py-1 rounded-md transition-all"
+          >
+            Hold Sale
+          </button>
+        )}
         <button onClick={onClear} className="text-xs text-text-faint hover:text-danger border border-surface-border hover:border-danger/50 px-2 py-1 rounded-md transition-all">
           Clear
         </button>
-      )}
+      </div>
     </div>
 
     <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">

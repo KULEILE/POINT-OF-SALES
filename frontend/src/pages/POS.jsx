@@ -10,6 +10,8 @@ import SettlementModal from '../components/payments/SettlementModal';
 import CustomerSelectModal from '../components/payments/CustomerSelectModal';
 import TransactionSearch from '../components/returns/TransactionSearch';
 import ReturnModal from '../components/returns/ReturnModal';
+import HoldSaleModal from '../components/pos/HoldSaleModal';
+import HeldSalesList from '../components/pos/HeldSalesList';
 import { useCart } from '../context/CartContext';
 import { validateCartStock } from '../utils/validators';
 
@@ -31,6 +33,8 @@ const POS = () => {
   const [showTransactionSearch, setShowTransactionSearch] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showHoldModal, setShowHoldModal] = useState(false);
+  const [showHeldSales, setShowHeldSales] = useState(false);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
@@ -103,7 +107,7 @@ const POS = () => {
     setShowSettlement(true);
   };
 
-  // Return/Refund handlers
+  // Return handlers
   const handleOpenReturn = () => {
     setShowTransactionSearch(true);
   };
@@ -118,6 +122,55 @@ const POS = () => {
     setShowReturnModal(false);
     setSelectedTransaction(null);
     toast.success('Return processed successfully.');
+  };
+
+  // Hold Sale handlers
+  const handleOpenHold = () => {
+    if (cart.length === 0) {
+      toast.error('Cannot hold an empty cart. Please add items first.');
+      return;
+    }
+    setShowHoldModal(true);
+  };
+
+  const handleHoldSuccess = () => {
+    setShowHoldModal(false);
+    clearCart();
+    toast.success('Sale held successfully. You can resume it later.');
+  };
+
+  const handleOpenHeldSales = () => {
+    setShowHeldSales(true);
+  };
+
+  const handleResumeHeldSale = (hold) => {
+    // Restore cart from held sale data
+    const cartData = hold.cart_data;
+    for (const item of cartData) {
+      // Add item back to cart
+      const product = {
+        product_id: item.product_id,
+        name: item.name,
+        selling_price: item.unit_price || item.selling_price,
+        quantity: item.quantity,
+        unit_price: item.unit_price || item.selling_price,
+        discount_applied: item.discount_applied || 0,
+        tax_rate: item.tax_rate || 15,
+        tax_exempt: item.tax_exempt || false,
+        stock_quantity: item.stock_quantity
+      };
+      // Use addToCart with the restored quantity
+      addToCart(product);
+      // Update quantity if needed
+      if (item.quantity > 1) {
+        updateQuantity(product.product_id, item.quantity);
+      }
+      if (item.discount_applied > 0) {
+        updateDiscount(product.product_id, item.discount_applied);
+      }
+    }
+    setShowHeldSales(false);
+    toast.success(`Resumed sale for ${hold.customer_name || 'Walk-in Customer'}`);
   };
 
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
@@ -142,6 +195,9 @@ const POS = () => {
             </button>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={handleOpenHeldSales} className="k-btn-outline text-sm px-4 py-2">
+              Resume Sale
+            </button>
             <button onClick={handleOpenReturn} className="k-btn-outline text-sm px-4 py-2">
               Return
             </button>
@@ -195,6 +251,7 @@ const POS = () => {
           onUpdateDiscount={updateDiscount}
           onClear={clearCart}
           onCheckout={handleCheckout}
+          onHold={handleOpenHold}
         />
       </div>
 
@@ -256,6 +313,24 @@ const POS = () => {
             setShowReturnModal(false);
             setSelectedTransaction(null);
           }}
+        />
+      )}
+
+      {/* Hold Sale Modals */}
+      {showHoldModal && (
+        <HoldSaleModal
+          cart={cart}
+          total={total}
+          itemCount={itemCount}
+          onSuccess={handleHoldSuccess}
+          onClose={() => setShowHoldModal(false)}
+        />
+      )}
+
+      {showHeldSales && (
+        <HeldSalesList
+          onSelect={handleResumeHeldSale}
+          onClose={() => setShowHeldSales(false)}
         />
       )}
     </div>
