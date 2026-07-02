@@ -1,3 +1,6 @@
+const pool = require('../config/db');
+const { auditLog } = require('../utils/helpers');
+
 const create = async (req, res) => {
   const { customer_name, customer_phone, cart_data, notes } = req.body;
 
@@ -65,4 +68,153 @@ const create = async (req, res) => {
       message: 'Failed to hold sale. Please try again.'
     });
   }
+};
+
+const getAll = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT h.*, u.full_name AS cashier_name
+       FROM held_sales h
+       LEFT JOIN users u ON h.cashier_id = u.user_id
+       WHERE h.status = 'active'
+       AND h.expires_at > NOW()
+       ORDER BY h.created_at DESC`
+    );
+
+    return res.json({
+      success: true,
+      holds: result.rows
+    });
+
+  } catch (err) {
+    console.error('[holds/getAll]', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load held sales. Please try again.'
+    });
+  }
+};
+
+const getById = async (req, res) => {
+  try {
+    const holdId = req.params.id;
+
+    const result = await pool.query(
+      `SELECT * FROM held_sales WHERE hold_id = $1 AND status = 'active'`,
+      [holdId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({
+        success: false,
+        message: 'Held sale not found. It may have been resumed or expired.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      hold: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('[holds/getById]', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load held sale. Please try again.'
+    });
+  }
+};
+
+const resume = async (req, res) => {
+  const holdId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM held_sales WHERE hold_id = $1 AND status = 'active'`,
+      [holdId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({
+        success: false,
+        message: 'Held sale not found. It may have been resumed or expired.'
+      });
+    }
+
+    const hold = result.rows[0];
+
+    await pool.query(
+      `UPDATE held_sales SET status = 'resumed' WHERE hold_id = $1`,
+      [holdId]
+    );
+
+    await auditLog(pool, {
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'RESUME_SALE',
+      action_details: `Resumed sale for ${hold.customer_name || 'Walk-in'} — ${hold.items_count} items`,
+      affected_table: 'held_sales',
+      affected_record_id: hold.hold_id
+    });
+
+    return res.json({
+      success: true,
+      message: 'Sale resumed successfully.',
+      hold: hold
+    });
+
+  } catch (err) {
+    console.error('[holds/resume]', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to resume sale. Please try again.'
+    });
+  }
+};
+
+const remove = async (req, res) => {
+  const holdId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      `UPDATE held_sales SET status = 'cancelled' WHERE hold_id = $1 RETURNING *`,
+      [holdId]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({
+        success: false,
+        message: 'Held sale not found.'
+      });
+    }
+
+    await auditLog(pool, {
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'CANCEL_HOLD',
+      action_details: `Cancelled held sale for ${result.rows[0].customer_name || 'Walk-in'}`,
+      affected_table: 'held_sales',
+      affected_record_id: holdId
+    });
+
+    return res.json({
+      success: true,
+      message: 'Held sale cancelled successfully.'
+    });
+
+  } catch (err) {
+    console.error('[holds/remove]', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to cancel held sale. Please try again.'
+    });
+  }
+};
+
+module.exports = {
+  create,
+  getAll,
+  getById,
+  resume,
+  remove
 };
