@@ -92,8 +92,7 @@ const POS = () => {
     return () => {
       if (previewTimeout.current) clearTimeout(previewTimeout.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, selectedCustomer, isWholesale]);
+  }, [cart, selectedCustomer, isWholesale, subtotal, taxAmount, total]);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
