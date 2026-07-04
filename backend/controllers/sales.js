@@ -41,7 +41,7 @@ const formatCurrency = (amount) => {
 };
 
 // ============================================================
-// PROMOTION FUNCTIONS
+// PROMOTION FUNCTIONS - FIXED
 // ============================================================
 
 const getActivePromotions = async (customer_id = null) => {
@@ -74,23 +74,33 @@ const getActivePromotions = async (customer_id = null) => {
   return result.rows;
 };
 
-const applyBestPromotion = (items, total_amount, promotions) => {
+const applyBestPromotion = (items, promotions) => {
   let bestPromotion = null;
   let bestDiscount = 0;
 
+  // Calculate subtotal from items (before any discounts)
+  const subtotal = items.reduce((sum, item) => {
+    const price = parseFloat(item.unit_price) || parseFloat(item.selling_price) || 0;
+    const qty = parseFloat(item.quantity) || 0;
+    return sum + (price * qty);
+  }, 0);
+
   for (const promo of promotions) {
-    // Check minimum purchase
-    if (parseFloat(promo.min_purchase) > total_amount) continue;
+    // Check minimum purchase against subtotal
+    const minPurchase = parseFloat(promo.min_purchase) || 0;
+    if (minPurchase > 0 && subtotal < minPurchase) {
+      continue;
+    }
 
     let discount = 0;
     if (promo.discount_type === 'percentage') {
-      discount = total_amount * (parseFloat(promo.discount_value) / 100);
+      discount = subtotal * (parseFloat(promo.discount_value) / 100);
     } else if (promo.discount_type === 'fixed') {
       discount = parseFloat(promo.discount_value);
     }
 
     // Cap discount at total
-    discount = Math.min(discount, total_amount);
+    discount = Math.min(discount, subtotal);
 
     if (discount > bestDiscount) {
       bestDiscount = discount;
@@ -98,7 +108,7 @@ const applyBestPromotion = (items, total_amount, promotions) => {
     }
   }
 
-  return { promotion: bestPromotion, discount: bestDiscount };
+  return { promotion: bestPromotion, discount: bestDiscount, subtotal };
 };
 
 // ============================================================
@@ -253,20 +263,22 @@ const create = async (req, res) => {
     }
 
     // ============================================================
-    // CHECK AND APPLY PROMOTIONS
+    // CHECK AND APPLY PROMOTIONS - FIXED
     // ============================================================
     
     let appliedPromotion = null;
     let appliedDiscount = 0;
+    let promotionSubtotal = 0;
 
     // Get active promotions
     const promotions = await getActivePromotions(customer_id || null);
     
-    // Apply best promotion
+    // Apply best promotion using items (not total_amount)
     if (promotions.length > 0) {
-      const result = applyBestPromotion(items, total_amount, promotions);
+      const result = applyBestPromotion(processedItems, promotions);
       appliedPromotion = result.promotion;
       appliedDiscount = result.discount;
+      promotionSubtotal = result.subtotal;
     }
 
     // Calculate final total after promotion

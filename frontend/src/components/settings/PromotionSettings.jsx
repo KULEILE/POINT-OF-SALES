@@ -277,7 +277,7 @@ const PromotionSettings = () => {
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Promotion Name <span className="text-danger">*</span>
+                  Promotion Name <span className="text-danger"></span>
                 </label>
                 <input
                   type="text"
@@ -304,7 +304,7 @@ const PromotionSettings = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    Discount Type <span className="text-danger">*</span>
+                    Discount Type <span className="text-danger"></span>
                   </label>
                   <select
                     className="k-input"
@@ -317,7 +317,7 @@ const PromotionSettings = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    Discount Value <span className="text-danger">*</span>
+                    Discount Value <span className="text-danger"></span>
                   </label>
                   <input
                     type="number"
@@ -334,7 +334,7 @@ const PromotionSettings = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    Start Date <span className="text-danger">*</span>
+                    Start Date <span className="text-danger"></span>
                   </label>
                   <input
                     type="date"
@@ -345,7 +345,7 @@ const PromotionSettings = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    End Date <span className="text-danger">*</span>
+                    End Date <span className="text-danger"></span>
                   </label>
                   <input
                     type="date"
@@ -373,7 +373,7 @@ const PromotionSettings = () => {
 
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Applies To <span className="text-danger">*</span>
+                  Applies To <span className="text-danger"></span>
                 </label>
                 <select
                   className="k-input"
