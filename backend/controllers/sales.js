@@ -74,12 +74,16 @@ const getActivePromotions = async (customer_id = null) => {
   return result.rows;
 };
 
-// `subtotal` here MUST be the pre-tax subtotal (after any per-item discounts).
-// Promotions are calculated off this pre-tax figure so that, downstream, tax
-// gets charged on (subtotal - promotion), never on the pre-discount amount.
-const applyBestPromotion = (subtotal, promotions) => {
+const applyBestPromotion = (items, promotions) => {
   let bestPromotion = null;
   let bestDiscount = 0;
+
+  // Calculate subtotal from items (before any discounts)
+  const subtotal = items.reduce((sum, item) => {
+    const price = parseFloat(item.unit_price) || parseFloat(item.selling_price) || 0;
+    const qty = parseFloat(item.quantity) || 0;
+    return sum + (price * qty);
+  }, 0);
 
   for (const promo of promotions) {
     // Check minimum purchase against subtotal
@@ -95,7 +99,7 @@ const applyBestPromotion = (subtotal, promotions) => {
       discount = parseFloat(promo.discount_value);
     }
 
-    // Cap discount at subtotal
+    // Cap discount at total
     discount = Math.min(discount, subtotal);
 
     if (discount > bestDiscount) {
@@ -104,38 +108,7 @@ const applyBestPromotion = (subtotal, promotions) => {
     }
   }
 
-  return { promotion: bestPromotion, discount: bestDiscount };
-};
-
-// Applies the best promotion to a pre-tax subtotal, then apportions the
-// discount across each item (proportional to its share of the subtotal) so
-// tax can be calculated per item on the AFTER-discount (taxable) amount.
-// This is what makes promotions "subtract before tax" instead of after.
-const applyPromotionAndCalculateTax = async (processedItems, subtotal, customer_id) => {
-  const promotions = await getActivePromotions(customer_id || null);
-
-  let appliedPromotion = null;
-  let appliedDiscount = 0;
-  if (promotions.length > 0) {
-    const promoResult = applyBestPromotion(subtotal, promotions);
-    appliedPromotion = promoResult.promotion;
-    appliedDiscount = promoResult.discount;
-  }
-
-  const promoRatio = subtotal > 0 ? appliedDiscount / subtotal : 0;
-  let total_tax = 0;
-
-  for (const item of processedItems) {
-    const itemDiscountShare = item.line_subtotal * promoRatio;
-    item.taxable_amount = Math.max(0, item.line_subtotal - itemDiscountShare);
-    item.tax_amount = item.tax_exempt ? 0 : item.taxable_amount * (item.tax_rate / 100);
-    total_tax += item.tax_amount;
-  }
-
-  const discountedSubtotal = Math.max(0, subtotal - appliedDiscount);
-  const finalTotal = discountedSubtotal + total_tax;
-
-  return { appliedPromotion, appliedDiscount, discountedSubtotal, total_tax, finalTotal };
+  return { promotion: bestPromotion, discount: bestDiscount, subtotal };
 };
 
 // ============================================================
@@ -203,7 +176,7 @@ const create = async (req, res) => {
     const settings = await getWholesaleSettings();
     const tiers = await getDiscountTiers();
 
-    let subtotal = 0;
+    let subtotal = 0, total_tax = 0;
     const processedItems = [];
 
     for (const item of items) {
@@ -255,37 +228,20 @@ const create = async (req, res) => {
       }
 
       const base = unitPrice * requested;
-      // Pre-tax line amount, after the item's own line discount only.
-      // Promotion discount and tax are both applied AFTER this, in that order.
-      const lineSubtotal = base * (1 - (discountApplied || 0) / 100);
-
-      subtotal += lineSubtotal;
+      const discounted = base * (1 - (discountApplied || 0) / 100);
+      const tax = item.tax_exempt ? 0 : discounted * (parseFloat(item.tax_rate) || 15) / 100;
+      
+      subtotal += discounted;
+      total_tax += tax;
 
       processedItems.push({
         ...item,
         unit_price: unitPrice,
-        discount_applied: discountApplied,
-        line_subtotal: lineSubtotal,
-        tax_rate: parseFloat(item.tax_rate) || 15,
-        tax_exempt: !!item.tax_exempt
+        discount_applied: discountApplied
       });
     }
 
-    // ============================================================
-    // APPLY PROMOTIONS TO THE PRE-TAX SUBTOTAL, THEN CALCULATE TAX
-    // ============================================================
-    // Order matters here: the promotion must reduce the subtotal BEFORE VAT
-    // is calculated, otherwise the customer ends up paying tax on money
-    // they were never charged.
-    const {
-      appliedPromotion,
-      appliedDiscount,
-      discountedSubtotal,
-      total_tax,
-      finalTotal
-    } = await applyPromotionAndCalculateTax(processedItems, subtotal, customer_id || null);
-
-    const taxRate = 15; // headline VAT rate shown on receipts
+    const total_amount = subtotal + total_tax;
 
     if (payment_method === 'credit' && customer_id) {
       const custCheck = await client.query(
@@ -296,15 +252,39 @@ const create = async (req, res) => {
         const available_credit =
           parseFloat(custCheck.rows[0].credit_limit || 0) -
           parseFloat(custCheck.rows[0].current_balance || 0);
-        if (finalTotal > available_credit) {
+        if (total_amount > available_credit) {
           await client.query('ROLLBACK');
           return res.status(400).json({
             success: false,
-            message: `Credit limit exceeded for ${custCheck.rows[0].full_name}. Available credit is ${formatCurrency(available_credit)}, but the sale total is ${formatCurrency(finalTotal)}.`,
+            message: `Credit limit exceeded for ${custCheck.rows[0].full_name}. Available credit is ${formatCurrency(available_credit)}, but the sale total is ${formatCurrency(total_amount)}.`,
           });
         }
       }
     }
+
+    // ============================================================
+    // CHECK AND APPLY PROMOTIONS
+    // ============================================================
+    
+    let appliedPromotion = null;
+    let appliedDiscount = 0;
+
+    // Get active promotions
+    const promotions = await getActivePromotions(customer_id || null);
+    
+    // Apply best promotion using items (not total_amount)
+    if (promotions.length > 0) {
+      const result = applyBestPromotion(processedItems, promotions);
+      appliedPromotion = result.promotion;
+      appliedDiscount = result.discount;
+    }
+
+    // Calculate final total after promotion - SUBTRACT the discount
+    const finalTotal = Math.max(0, total_amount - appliedDiscount);
+    
+    // Recalculate tax based on discounted total
+    const taxRate = 15;
+    const taxOnDiscounted = finalTotal * (taxRate / 100);
 
     const deposit = parseFloat(deposit_amount) || 0;
     const change_amount =
@@ -325,7 +305,7 @@ const create = async (req, res) => {
 
     const transactionType = payment_method;
 
-    // Original pre-tax, pre-promotion subtotal (shown as "Subtotal" on receipts)
+    // FIX: Save original subtotal before discount
     const originalSubtotal = subtotal;
 
     const txResult = await client.query(
@@ -357,7 +337,7 @@ const create = async (req, res) => {
         payment_method,
         transactionType,
         originalSubtotal.toFixed(2), // Original subtotal before discount
-        total_tax.toFixed(2), // Tax calculated AFTER the promotion discount
+        taxOnDiscounted.toFixed(2),
         taxRate,
         finalTotal.toFixed(2), // Final total after discount
         paid_amount.toFixed(2),
@@ -388,11 +368,11 @@ const create = async (req, res) => {
         `INSERT INTO transaction_items (
           transaction_id, product_id, quantity, unit_type,
           unit_price, cost_at_sale, discount_applied,
-          tax_rate, tax_exempt, taxable_amount, tax_amount, total_price
+          tax_rate, tax_exempt, total_price
         ) VALUES (
           $1, $2, $3, $4,
           $5, (SELECT cost_price FROM products WHERE product_id = $2),
-          $6, $7, $8, $9, $10, $11
+          $6, $7, $8, $9
         )`,
         [
           tx.transaction_id,
@@ -403,8 +383,6 @@ const create = async (req, res) => {
           item.discount_applied || 0,
           item.tax_rate || 15,
           item.tax_exempt || false,
-          item.taxable_amount.toFixed(2),
-          item.tax_amount.toFixed(2),
           (parseFloat(item.unit_price) * parseFloat(item.quantity)).toFixed(2),
         ]
       );
@@ -503,10 +481,7 @@ const create = async (req, res) => {
     });
 
     const final = await client.query(
-      `SELECT t.*, p.name AS promotion_name
-       FROM transactions t
-       LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
-       WHERE t.transaction_id = $1`,
+      `SELECT * FROM transactions WHERE transaction_id = $1`,
       [tx.transaction_id]
     );
 
@@ -533,85 +508,6 @@ const create = async (req, res) => {
     });
   } finally {
     client.release();
-  }
-};
-
-// ============================================================
-// PREVIEW SALE TOTALS (read-only — used to show live cart totals,
-// including any applicable promotion, before the sale is finalized)
-// ============================================================
-
-const previewTotals = async (req, res) => {
-  const { items, customer_id, is_wholesale } = req.body;
-
-  if (!items || !items.length) {
-    return res.json({
-      success: true,
-      subtotal: '0.00',
-      discount_amount: '0.00',
-      promotion: null,
-      tax_amount: '0.00',
-      total_amount: '0.00'
-    });
-  }
-
-  try {
-    const isWholesale = is_wholesale || false;
-    const settings = await getWholesaleSettings();
-    const tiers = await getDiscountTiers();
-
-    let subtotal = 0;
-    const processedItems = [];
-
-    for (const item of items) {
-      const requested = parseFloat(item.quantity) || 0;
-      let unitPrice = parseFloat(item.unit_price) || 0;
-      let discountApplied = parseFloat(item.discount_applied) || 0;
-
-      if (isWholesale) {
-        const productResult = await pool.query(
-          `SELECT wholesale_price, selling_price FROM products WHERE product_id = $1`,
-          [item.product_id]
-        );
-        const product = productResult.rows[0];
-        if (product && product.wholesale_price) {
-          const wholesaleResult = calculateWholesalePrice(product, requested, settings, tiers);
-          unitPrice = wholesaleResult.discountedPrice;
-          discountApplied = wholesaleResult.discount;
-        }
-      }
-
-      const base = unitPrice * requested;
-      const lineSubtotal = base * (1 - (discountApplied || 0) / 100);
-      subtotal += lineSubtotal;
-
-      processedItems.push({
-        line_subtotal: lineSubtotal,
-        tax_rate: parseFloat(item.tax_rate) || 15,
-        tax_exempt: !!item.tax_exempt
-      });
-    }
-
-    const { appliedPromotion, appliedDiscount, discountedSubtotal, total_tax, finalTotal } =
-      await applyPromotionAndCalculateTax(processedItems, subtotal, customer_id || null);
-
-    return res.json({
-      success: true,
-      subtotal: subtotal.toFixed(2),
-      discounted_subtotal: discountedSubtotal.toFixed(2),
-      discount_amount: appliedDiscount.toFixed(2),
-      promotion: appliedPromotion
-        ? { promotion_id: appliedPromotion.promotion_id, name: appliedPromotion.name }
-        : null,
-      tax_amount: total_tax.toFixed(2),
-      total_amount: finalTotal.toFixed(2)
-    });
-  } catch (err) {
-    console.error('[sales/previewTotals]', err.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Unable to calculate totals. Please try again.'
-    });
   }
 };
 
@@ -844,4 +740,4 @@ const todaySummary = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll, getById, getByReceipt, todaySummary, previewTotals };
+module.exports = { create, getAll, getById, getByReceipt, todaySummary };
