@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { userService } from '../services/userService';
 import { useAuth } from '../context/AuthContext';
 import ReturnSettings from '../components/settings/ReturnSettings';
+import PromotionSettings from '../components/settings/PromotionSettings';
 import toast from 'react-hot-toast';
 
 const TABS = [
   { key: 'account', label: 'Account' },
-  { key: 'returns', label: 'Returns' }
+  { key: 'returns', label: 'Returns' },
+  { key: 'promotions', label: 'Promotions' }
 ];
 
 const Settings = () => {
@@ -48,12 +50,12 @@ const Settings = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-surface-panel border border-surface-border rounded-xl p-1 mb-6">
+      <div className="flex gap-1 bg-surface-panel border border-surface-border rounded-xl p-1 mb-6 overflow-x-auto">
         {TABS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-600 transition-all ${
+            className={`px-4 py-1.5 rounded-lg text-xs font-600 transition-all whitespace-nowrap ${
               activeTab === tab.key
                 ? 'bg-surface-card text-text-primary shadow-sm'
                 : 'text-text-muted hover:text-text-primary'
@@ -134,6 +136,9 @@ const Settings = () => {
 
       {/* Returns Tab */}
       {activeTab === 'returns' && <ReturnSettings />}
+
+      {/* Promotions Tab */}
+      {activeTab === 'promotions' && <PromotionSettings />}
     </div>
   );
 };

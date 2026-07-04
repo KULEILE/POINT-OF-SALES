@@ -1,6 +1,10 @@
 const pool = require('../config/db');
 const { auditLog } = require('../utils/helpers');
 
+// ============================================================
+// WHOLESALE SETTINGS
+// ============================================================
+
 const getWholesaleSettings = async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM wholesale_settings LIMIT 1`);
@@ -67,6 +71,10 @@ const updateWholesaleSettings = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to update wholesale settings.' });
   }
 };
+
+// ============================================================
+// DISCOUNT TIERS
+// ============================================================
 
 const getDiscountTiers = async (req, res) => {
   try {
@@ -253,11 +261,284 @@ const updateReturnSettings = async (req, res) => {
   }
 };
 
+// ============================================================
+// PROMOTIONS SETTINGS
+// ============================================================
+
+const getAllPromotions = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, 
+             COUNT(DISTINCT pc.customer_id) AS customer_count,
+             COUNT(DISTINCT pu.usage_id) AS usage_count
+      FROM promotions p
+      LEFT JOIN promotion_customers pc ON p.promotion_id = pc.promotion_id
+      LEFT JOIN promotion_usage pu ON p.promotion_id = pu.promotion_id
+      GROUP BY p.promotion_id
+      ORDER BY p.created_at DESC
+    `);
+    return res.json({ success: true, promotions: result.rows });
+  } catch (err) {
+    console.error('[settings/getAllPromotions]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch promotions.' });
+  }
+};
+
+const getPromotionById = async (req, res) => {
+  try {
+    const promotionId = req.params.id;
+    const result = await pool.query(
+      `SELECT * FROM promotions WHERE promotion_id = $1`,
+      [promotionId]
+    );
+    if (!result.rows[0]) {
+      return res.status(404).json({ success: false, message: 'Promotion not found.' });
+    }
+    const customers = await pool.query(
+      `SELECT customer_id FROM promotion_customers WHERE promotion_id = $1`,
+      [promotionId]
+    );
+    return res.json({
+      success: true,
+      promotion: result.rows[0],
+      customers: customers.rows.map(c => c.customer_id)
+    });
+  } catch (err) {
+    console.error('[settings/getPromotionById]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch promotion.' });
+  }
+};
+
+const createPromotion = async (req, res) => {
+  const {
+    name,
+    description,
+    discount_type,
+    discount_value,
+    applies_to,
+    min_purchase,
+    start_date,
+    end_date,
+    customer_ids
+  } = req.body;
+
+  if (!name || discount_value == null || !start_date || !end_date) {
+    return res.status(400).json({
+      success: false,
+      message: 'Name, discount value, start date and end date are required.'
+    });
+  }
+
+  if (new Date(start_date) > new Date(end_date)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Start date cannot be after end date.'
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `INSERT INTO promotions (
+        name, description, discount_type, discount_value,
+        applies_to, min_purchase, start_date, end_date,
+        is_active, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9) RETURNING *`,
+      [
+        name,
+        description || null,
+        discount_type || 'percentage',
+        discount_value,
+        applies_to || 'all',
+        min_purchase || 0,
+        start_date,
+        end_date,
+        req.user.user_id
+      ]
+    );
+
+    const promotion = result.rows[0];
+
+    // Add customers if specific
+    if (customer_ids && Array.isArray(customer_ids) && customer_ids.length > 0) {
+      for (const customerId of customer_ids) {
+        await client.query(
+          `INSERT INTO promotion_customers (promotion_id, customer_id)
+           VALUES ($1, $2)`,
+          [promotion.promotion_id, customerId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    await auditLog(pool, {
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'CREATE_PROMOTION',
+      action_details: `Created promotion: ${name}`,
+      affected_table: 'promotions',
+      affected_record_id: promotion.promotion_id
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Promotion created successfully.',
+      promotion: promotion
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[settings/createPromotion]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to create promotion.' });
+  } finally {
+    client.release();
+  }
+};
+
+const updatePromotion = async (req, res) => {
+  const promotionId = req.params.id;
+  const {
+    name,
+    description,
+    discount_type,
+    discount_value,
+    applies_to,
+    min_purchase,
+    start_date,
+    end_date,
+    is_active,
+    customer_ids
+  } = req.body;
+
+  if (!name || discount_value == null || !start_date || !end_date) {
+    return res.status(400).json({
+      success: false,
+      message: 'Name, discount value, start date and end date are required.'
+    });
+  }
+
+  if (new Date(start_date) > new Date(end_date)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Start date cannot be after end date.'
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `UPDATE promotions 
+       SET name = $1,
+           description = $2,
+           discount_type = $3,
+           discount_value = $4,
+           applies_to = $5,
+           min_purchase = $6,
+           start_date = $7,
+           end_date = $8,
+           is_active = $9,
+           updated_at = NOW()
+       WHERE promotion_id = $10
+       RETURNING *`,
+      [
+        name,
+        description || null,
+        discount_type || 'percentage',
+        discount_value,
+        applies_to || 'all',
+        min_purchase || 0,
+        start_date,
+        end_date,
+        is_active !== undefined ? is_active : true,
+        promotionId
+      ]
+    );
+
+    if (!result.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Promotion not found.' });
+    }
+
+    // Update customers
+    await client.query(`DELETE FROM promotion_customers WHERE promotion_id = $1`, [promotionId]);
+
+    if (customer_ids && Array.isArray(customer_ids) && customer_ids.length > 0) {
+      for (const customerId of customer_ids) {
+        await client.query(
+          `INSERT INTO promotion_customers (promotion_id, customer_id)
+           VALUES ($1, $2)`,
+          [promotionId, customerId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    await auditLog(pool, {
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'UPDATE_PROMOTION',
+      action_details: `Updated promotion: ${name}`,
+      affected_table: 'promotions',
+      affected_record_id: promotionId
+    });
+
+    return res.json({
+      success: true,
+      message: 'Promotion updated successfully.',
+      promotion: result.rows[0]
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[settings/updatePromotion]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to update promotion.' });
+  } finally {
+    client.release();
+  }
+};
+
+const deletePromotion = async (req, res) => {
+  try {
+    const promotionId = req.params.id;
+    const result = await pool.query(
+      `DELETE FROM promotions WHERE promotion_id = $1 RETURNING *`,
+      [promotionId]
+    );
+    if (!result.rows[0]) {
+      return res.status(404).json({ success: false, message: 'Promotion not found.' });
+    }
+    await auditLog(pool, {
+      user_id: req.user.user_id,
+      username: req.user.username,
+      action_type: 'DELETE_PROMOTION',
+      action_details: `Deleted promotion: ${result.rows[0].name}`,
+      affected_table: 'promotions',
+      affected_record_id: promotionId
+    });
+    return res.json({
+      success: true,
+      message: 'Promotion deleted successfully.'
+    });
+  } catch (err) {
+    console.error('[settings/deletePromotion]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to delete promotion.' });
+  }
+};
+
 module.exports = {
   getWholesaleSettings,
   updateWholesaleSettings,
   getDiscountTiers,
   updateDiscountTiers,
   getReturnSettings,
-  updateReturnSettings
+  updateReturnSettings,
+  getAllPromotions,
+  getPromotionById,
+  createPromotion,
+  updatePromotion,
+  deletePromotion
 };

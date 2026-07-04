@@ -1,121 +1,111 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { holdService } from '../../services/holdService';
-import { formatCurrency, formatDateTime } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import toast from 'react-hot-toast';
 
-const HeldSalesList = ({ onSelect, onClose }) => {
-  const [holds, setHolds] = useState([]);
-  const [loading, setLoading] = useState(true);
+const HoldSaleModal = ({ cart, total, itemCount, onSuccess, onClose }) => {
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadHolds();
-  }, []);
+  const handleSubmit = async () => {
+    if (cart.length === 0) {
+      toast.error('Cannot hold an empty cart. Please add items first.');
+      return;
+    }
 
-  const loadHolds = async () => {
     setLoading(true);
     try {
-      const response = await holdService.getAll();
-      setHolds(response.data.holds || []);
+      const cartData = cart.map(item => ({
+        product_id: item.product_id,
+        name: item.name,
+        quantity: item.quantity,
+        unit_price: item.unit_price || item.selling_price,
+        selling_price: item.selling_price,
+        discount_applied: item.discount_applied || 0,
+        tax_rate: item.tax_rate || 15,
+        tax_exempt: item.tax_exempt || false,
+        stock_quantity: item.stock_quantity
+      }));
+
+      const payload = {
+        customer_name: null,
+        customer_phone: null,
+        cart_data: cartData,
+        notes: notes || null
+      };
+
+      const response = await holdService.create(payload);
+      toast.success(response.data.message || 'Sale held successfully.');
+      onSuccess(response.data.hold);
     } catch (err) {
-      toast.error('Failed to load held sales.');
+      toast.error(err.response?.data?.message || 'Failed to hold sale. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResume = async (hold) => {
-    try {
-      const response = await holdService.resume(hold.hold_id);
-      toast.success('Sale resumed successfully.');
-      onSelect(response.data.hold);
-      onClose();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to resume sale.');
-    }
-  };
-
-  const handleRemove = async (holdId) => {
-    if (!confirm('Are you sure you want to cancel this held sale?')) {
-      return;
-    }
-    try {
-      await holdService.remove(holdId);
-      toast.success('Held sale cancelled.');
-      loadHolds();
-    } catch (err) {
-      toast.error('Failed to cancel held sale.');
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-card border border-surface-border rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+      <div className="bg-surface-card border border-surface-border rounded-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-surface-border">
-          <h2 className="text-base font-700 text-text-primary">Held Sales</h2>
-          <button onClick={onClose} className="text-text-faint hover:text-text-primary text-2xl leading-none">
+          <div>
+            <h2 className="text-base font-700 text-text-primary">Hold Sale</h2>
+            <p className="text-sm text-text-muted mt-0.5">
+              {itemCount} items — {formatCurrency(total)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-text-faint hover:text-text-primary text-2xl leading-none transition-colors"
+          >
             ×
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-2 border-surface-border border-t-primary rounded-full animate-spin" />
+        <div className="p-5 space-y-4">
+          <div className="bg-surface-bg border border-surface-border rounded-xl p-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-text-muted">Items</span>
+              <span className="font-600 text-text-primary">{itemCount}</span>
             </div>
-          ) : holds.length === 0 ? (
-            <div className="text-center py-8 text-text-muted">
-              <p className="text-sm">No held sales found.</p>
-              <p className="text-xs mt-1">Hold a sale to save it for later.</p>
+            <div className="flex justify-between text-sm mt-1">
+              <span className="text-text-muted">Total</span>
+              <span className="font-700 text-primary">{formatCurrency(total)}</span>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {holds.map((hold) => (
-                <div key={hold.hold_id} className="bg-surface-bg border border-surface-border rounded-xl p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-600 text-text-primary">{hold.customer_name || 'Walk-in Customer'}</p>
-                      {hold.customer_phone && (
-                        <p className="text-xs text-text-muted">{hold.customer_phone}</p>
-                      )}
-                      <p className="text-xs text-text-muted mt-1">
-                        {hold.items_count} items • {formatCurrency(hold.total_amount)}
-                      </p>
-                      <p className="text-xs text-text-faint">
-                        Held: {formatDateTime(hold.created_at)}
-                      </p>
-                      {hold.notes && (
-                        <p className="text-xs text-text-muted mt-1">Note: {hold.notes}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={() => handleResume(hold)}
-                        className="text-xs text-primary hover:underline font-600"
-                      >
-                        Resume
-                      </button>
-                      <button
-                        onClick={() => handleRemove(hold.hold_id)}
-                        className="text-xs text-text-faint hover:text-danger"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="flex justify-between text-xs text-text-faint mt-1">
+              <span>Held sale expires after 24 hours</span>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="p-4 border-t border-surface-border">
-          <button onClick={loadHolds} className="k-btn-outline w-full py-2 text-sm">
-            Refresh
-          </button>
+          <div>
+            <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
+              Notes (Optional)
+            </label>
+            <input
+              type="text"
+              className="k-input"
+              placeholder="Add notes (e.g., customer waiting for husband)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button onClick={onClose} className="k-btn-outline flex-1 py-3 text-sm">
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={loading || cart.length === 0}
+              className={`k-btn-primary flex-1 py-3 text-sm ${(loading || cart.length === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {loading ? 'Holding...' : 'Hold Sale'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-export default HeldSalesList;
+export default HoldSaleModal;

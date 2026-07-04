@@ -15,4 +15,11 @@ router.put('/discount-tiers', protect, allowRoles('admin','manager'), c.updateDi
 router.get('/return', protect, allowRoles('admin','manager'), c.getReturnSettings);
 router.put('/return', protect, allowRoles('admin','manager'), c.updateReturnSettings);
 
+// Promotions
+router.get('/promotions', protect, allowRoles('admin','manager'), c.getAllPromotions);
+router.get('/promotions/:id', protect, allowRoles('admin','manager'), c.getPromotionById);
+router.post('/promotions', protect, allowRoles('admin','manager'), c.createPromotion);
+router.put('/promotions/:id', protect, allowRoles('admin','manager'), c.updatePromotion);
+router.delete('/promotions/:id', protect, allowRoles('admin','manager'), c.deletePromotion);
+
 module.exports = router;

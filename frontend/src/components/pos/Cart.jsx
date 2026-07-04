@@ -14,7 +14,9 @@ const Cart = ({
   onClear, 
   onCheckout,
   isWholesale,
-  onHold 
+  onHold,
+  promotion,
+  discountAmount
 }) => (
   <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
     <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
@@ -23,6 +25,9 @@ const Cart = ({
         <p className="text-xs text-text-muted">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
         {isWholesale && (
           <span className="text-xs text-primary font-600">Wholesale Mode</span>
+        )}
+        {promotion && (
+          <span className="text-xs text-success font-600 ml-1">Promotion Applied</span>
         )}
       </div>
       <div className="flex gap-2">
@@ -72,6 +77,12 @@ const Cart = ({
             <div className="flex justify-between text-sm text-text-muted">
               <span>Sale Type</span>
               <span className="text-primary font-600">Wholesale</span>
+            </div>
+          )}
+          {promotion && discountAmount > 0 && (
+            <div className="flex justify-between text-sm text-success">
+              <span>Promotion: {promotion.name}</span>
+              <span>-{formatCurrency(discountAmount)}</span>
             </div>
           )}
           <div className="flex justify-between text-sm text-text-muted">

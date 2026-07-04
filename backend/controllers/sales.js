@@ -40,6 +40,71 @@ const formatCurrency = (amount) => {
   return `M ${parseFloat(amount || 0).toFixed(2)}`;
 };
 
+// ============================================================
+// PROMOTION FUNCTIONS
+// ============================================================
+
+const getActivePromotions = async (customer_id = null) => {
+  let query = `
+    SELECT p.* FROM promotions p
+    WHERE p.is_active = TRUE
+    AND NOW() BETWEEN p.start_date AND p.end_date
+  `;
+  const params = [];
+
+  if (customer_id) {
+    query += `
+      AND (
+        p.applies_to = 'all'
+        OR EXISTS (
+          SELECT 1 FROM promotion_customers pc 
+          WHERE pc.promotion_id = p.promotion_id 
+          AND pc.customer_id = $1
+        )
+      )
+    `;
+    params.push(customer_id);
+  } else {
+    query += ` AND p.applies_to = 'all'`;
+  }
+
+  query += ` ORDER BY p.discount_value DESC`;
+
+  const result = await pool.query(query, params);
+  return result.rows;
+};
+
+const applyBestPromotion = (items, total_amount, promotions) => {
+  let bestPromotion = null;
+  let bestDiscount = 0;
+
+  for (const promo of promotions) {
+    // Check minimum purchase
+    if (parseFloat(promo.min_purchase) > total_amount) continue;
+
+    let discount = 0;
+    if (promo.discount_type === 'percentage') {
+      discount = total_amount * (parseFloat(promo.discount_value) / 100);
+    } else if (promo.discount_type === 'fixed') {
+      discount = parseFloat(promo.discount_value);
+    }
+
+    // Cap discount at total
+    discount = Math.min(discount, total_amount);
+
+    if (discount > bestDiscount) {
+      bestDiscount = discount;
+      bestPromotion = promo;
+    }
+  }
+
+  return { promotion: bestPromotion, discount: bestDiscount };
+};
+
+// ============================================================
+// CREATE SALE
+// ============================================================
+
 const create = async (req, res) => {
   const {
     items,
@@ -187,19 +252,42 @@ const create = async (req, res) => {
       }
     }
 
+    // ============================================================
+    // CHECK AND APPLY PROMOTIONS
+    // ============================================================
+    
+    let appliedPromotion = null;
+    let appliedDiscount = 0;
+
+    // Get active promotions
+    const promotions = await getActivePromotions(customer_id || null);
+    
+    // Apply best promotion
+    if (promotions.length > 0) {
+      const result = applyBestPromotion(items, total_amount, promotions);
+      appliedPromotion = result.promotion;
+      appliedDiscount = result.discount;
+    }
+
+    // Calculate final total after promotion
+    const finalTotal = Math.max(0, total_amount - appliedDiscount);
+    // Recalculate tax based on discounted total
+    const taxRate = 15;
+    const taxOnDiscounted = finalTotal * (taxRate / 100);
+
     const deposit = parseFloat(deposit_amount) || 0;
     const change_amount =
       payment_method === 'cash'
-        ? Math.max(0, (parseFloat(amount_paid) || 0) - total_amount)
+        ? Math.max(0, (parseFloat(amount_paid) || 0) - finalTotal)
         : 0;
     const balance_due =
-      payment_method === 'credit' ? total_amount
-      : payment_method === 'layby' ? Math.max(0, total_amount - deposit)
+      payment_method === 'credit' ? finalTotal
+      : payment_method === 'layby' ? Math.max(0, finalTotal - deposit)
       : 0;
     const paid_amount =
       payment_method === 'credit' ? 0
       : payment_method === 'layby' ? deposit
-      : parseFloat(amount_paid) || total_amount;
+      : parseFloat(amount_paid) || finalTotal;
     const pay_status = balance_due > 0 ? 'pending' : 'paid';
     const due_date = new Date();
     due_date.setDate(due_date.getDate() + duration);
@@ -214,15 +302,17 @@ const create = async (req, res) => {
         subtotal, tax_amount, tax_rate, total_amount,
         amount_paid, change_amount, balance_due,
         payment_status, status, notes,
-        duration_days, due_date, customer_type
+        duration_days, due_date, customer_type,
+        promotion_id, discount_amount
       ) VALUES (
         'PENDING', $1, $2, $3,
         $4, $5,
         $6, $7,
-        $8, $9, 15, $10,
-        $11, $12, $13,
-        $14, 'completed', $15,
-        $16, $17, $18
+        $8, $9, $10, $11,
+        $12, $13, $14,
+        $15, 'completed', $16,
+        $17, $18, $19,
+        $20, $21
       ) RETURNING *`,
       [
         customer_id || null,
@@ -233,8 +323,9 @@ const create = async (req, res) => {
         payment_method,
         transactionType,
         subtotal.toFixed(2),
-        total_tax.toFixed(2),
-        total_amount.toFixed(2),
+        taxOnDiscounted.toFixed(2),
+        taxRate,
+        finalTotal.toFixed(2),
         paid_amount.toFixed(2),
         change_amount.toFixed(2),
         balance_due.toFixed(2),
@@ -242,10 +333,21 @@ const create = async (req, res) => {
         notes || null,
         duration,
         due_date.toISOString().split('T')[0],
-        finalCustomerType
+        finalCustomerType,
+        appliedPromotion ? appliedPromotion.promotion_id : null,
+        appliedDiscount.toFixed(2)
       ]
     );
     const tx = txResult.rows[0];
+
+    // Record promotion usage
+    if (appliedPromotion && appliedDiscount > 0) {
+      await client.query(
+        `INSERT INTO promotion_usage (promotion_id, transaction_id, discount_amount)
+         VALUES ($1, $2, $3)`,
+        [appliedPromotion.promotion_id, tx.transaction_id, appliedDiscount.toFixed(2)]
+      );
+    }
 
     for (const item of processedItems) {
       await client.query(
@@ -288,7 +390,7 @@ const create = async (req, res) => {
         [customer_id]
       );
       const prev = parseFloat(cust.rows[0]?.current_balance || 0);
-      const next = prev + total_amount;
+      const next = prev + finalTotal;
 
       await client.query(
         `INSERT INTO credit_transactions (
@@ -299,7 +401,7 @@ const create = async (req, res) => {
         [
           customer_id,
           tx.transaction_id,
-          total_amount.toFixed(2),
+          finalTotal.toFixed(2),
           prev.toFixed(2),
           next.toFixed(2),
           due_date.toISOString().split('T')[0],
@@ -323,7 +425,7 @@ const create = async (req, res) => {
           [
             tx.transaction_id,
             deposit.toFixed(2),
-            total_amount.toFixed(2),
+            finalTotal.toFixed(2),
             balance_due.toFixed(2),
             req.user.user_id,
           ]
@@ -359,7 +461,7 @@ const create = async (req, res) => {
       user_id: req.user.user_id,
       username: req.user.username,
       action_type: 'SALE',
-      action_details: `${payment_method.toUpperCase()} ${finalCustomerType.toUpperCase()} sale — M ${total_amount.toFixed(2)} — Receipt: ${tx.receipt_number}`,
+      action_details: `${payment_method.toUpperCase()} ${finalCustomerType.toUpperCase()} sale — M ${finalTotal.toFixed(2)} — Receipt: ${tx.receipt_number}${appliedPromotion ? ` — Promotion: ${appliedPromotion.name} (${formatCurrency(appliedDiscount)})` : ''}`,
       affected_table: 'transactions',
       affected_record_id: tx.transaction_id,
     });
@@ -378,7 +480,9 @@ const create = async (req, res) => {
       success: true,
       message: 'Sale processed successfully.',
       transaction: final.rows[0],
-      payment_splits: splits.rows
+      payment_splits: splits.rows,
+      promotion_applied: appliedPromotion,
+      discount_amount: appliedDiscount
     });
 
   } catch (err) {
@@ -393,6 +497,10 @@ const create = async (req, res) => {
   }
 };
 
+// ============================================================
+// GET ALL SALES
+// ============================================================
+
 const getAll = async (req, res) => {
   const { date_from, date_to, cashier_id, payment_method, status, customer_type, search, page = 1, limit = 20 } = req.query;
   const { limit: lim, offset } = paginate(page, limit);
@@ -403,10 +511,13 @@ const getAll = async (req, res) => {
              t.payment_method, t.total_amount, t.status, t.payment_status,
              t.cashier_name, t.customer_phone, t.is_guest,
              t.duration_days, t.due_date, t.customer_type,
+             t.discount_amount,
              c.full_name AS customer_name,
+             p.name AS promotion_name,
              (SELECT COUNT(*) FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id) AS item_count
       FROM transactions t
       LEFT JOIN customers c ON t.customer_id = c.customer_id
+      LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
       WHERE 1=1`;
     const params = [];
 
@@ -452,12 +563,18 @@ const getAll = async (req, res) => {
   }
 };
 
+// ============================================================
+// GET SALE BY ID
+// ============================================================
+
 const getById = async (req, res) => {
   try {
     const tx = await pool.query(
-      `SELECT t.*, u.full_name AS cashier_full
+      `SELECT t.*, u.full_name AS cashier_full,
+              p.name AS promotion_name
        FROM transactions t
        LEFT JOIN users u ON t.cashier_id = u.user_id
+       LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
        WHERE t.transaction_id = $1`,
       [req.params.id]
     );
@@ -496,12 +613,18 @@ const getById = async (req, res) => {
   }
 };
 
+// ============================================================
+// GET SALE BY RECEIPT NUMBER
+// ============================================================
+
 const getByReceipt = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT t.*, u.full_name AS cashier_full
+      `SELECT t.*, u.full_name AS cashier_full,
+              p.name AS promotion_name
        FROM transactions t
        LEFT JOIN users u ON t.cashier_id = u.user_id
+       LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
        WHERE t.receipt_number = $1`,
       [req.params.receipt_number]
     );
@@ -569,6 +692,10 @@ const getByReceipt = async (req, res) => {
   }
 };
 
+// ============================================================
+// TODAY'S SALES SUMMARY
+// ============================================================
+
 const todaySummary = async (req, res) => {
   try {
     const result = await pool.query(
@@ -583,7 +710,9 @@ const todaySummary = async (req, res) => {
          COALESCE(SUM(CASE WHEN payment_method = 'credit' THEN total_amount ELSE 0 END), 0) AS credit_sales,
          COALESCE(SUM(CASE WHEN payment_method = 'layby' THEN total_amount ELSE 0 END), 0) AS layby_sales,
          COALESCE(SUM(CASE WHEN customer_type = 'wholesale' THEN total_amount ELSE 0 END), 0) AS wholesale_sales,
-         COALESCE(SUM(CASE WHEN customer_type = 'retail' THEN total_amount ELSE 0 END), 0) AS retail_sales
+         COALESCE(SUM(CASE WHEN customer_type = 'retail' THEN total_amount ELSE 0 END), 0) AS retail_sales,
+         COALESCE(SUM(discount_amount), 0) AS total_discounts,
+         COALESCE(SUM(CASE WHEN promotion_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS promotion_used_count
        FROM transactions
        WHERE DATE(transaction_date) = CURRENT_DATE AND status = 'completed'`
     );

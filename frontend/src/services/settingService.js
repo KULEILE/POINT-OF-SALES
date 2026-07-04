@@ -12,4 +12,11 @@ export const settingService = {
   // Return settings
   getReturnSettings: () => api.get('/settings/return'),
   updateReturnSettings: (data) => api.put('/settings/return', data),
+
+  // Promotions
+  getPromotions: () => api.get('/settings/promotions'),
+  getPromotionById: (id) => api.get(`/settings/promotions/${id}`),
+  createPromotion: (data) => api.post('/settings/promotions', data),
+  updatePromotion: (id, data) => api.put(`/settings/promotions/${id}`, data),
+  deletePromotion: (id) => api.delete(`/settings/promotions/${id}`),
 };
