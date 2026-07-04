@@ -268,21 +268,27 @@ const create = async (req, res) => {
     
     let appliedPromotion = null;
     let appliedDiscount = 0;
-    let promotionSubtotal = 0;
 
     // Get active promotions
     const promotions = await getActivePromotions(customer_id || null);
     
+    // Calculate subtotal before any discounts
+    const subtotalBeforePromo = processedItems.reduce((sum, item) => {
+      const price = parseFloat(item.unit_price) || parseFloat(item.selling_price) || 0;
+      const qty = parseFloat(item.quantity) || 0;
+      return sum + (price * qty);
+    }, 0);
+
     // Apply best promotion using items (not total_amount)
     if (promotions.length > 0) {
       const result = applyBestPromotion(processedItems, promotions);
       appliedPromotion = result.promotion;
       appliedDiscount = result.discount;
-      promotionSubtotal = result.subtotal;
     }
 
-    // Calculate final total after promotion
+    // Calculate final total after promotion - SUBTRACT the discount
     const finalTotal = Math.max(0, total_amount - appliedDiscount);
+    
     // Recalculate tax based on discounted total
     const taxRate = 15;
     const taxOnDiscounted = finalTotal * (taxRate / 100);
