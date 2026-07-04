@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import ProductGrid from '../components/pos/ProductGrid';
 import Cart from '../components/pos/Cart';
@@ -14,6 +14,7 @@ import HoldSaleModal from '../components/pos/HoldSaleModal';
 import HeldSalesList from '../components/pos/HeldSalesList';
 import { useCart } from '../context/CartContext';
 import { validateCartStock } from '../utils/validators';
+import { saleService } from '../services/saleService';
 
 const POS = () => {
   const {
@@ -35,8 +36,64 @@ const POS = () => {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [showHeldSales, setShowHeldSales] = useState(false);
-  const [appliedPromotion, setAppliedPromotion] = useState(null);
-  const [appliedDiscount, setAppliedDiscount] = useState(0);
+
+  // Live, backend-authoritative totals for the current cart. Unlike the raw
+  // CartContext values, these reflect any applicable promotion, and — this is
+  // the important part — VAT is calculated AFTER the promotion is subtracted,
+  // not before. This keeps what the cashier sees, what they charge, and what
+  // gets saved on the transaction all consistent.
+  const [saleTotals, setSaleTotals] = useState({
+    subtotal: 0,
+    discountAmount: 0,
+    promotion: null,
+    taxAmount: 0,
+    total: 0,
+  });
+  const previewTimeout = useRef(null);
+
+  useEffect(() => {
+    if (previewTimeout.current) clearTimeout(previewTimeout.current);
+
+    if (cart.length === 0) {
+      setSaleTotals({ subtotal: 0, discountAmount: 0, promotion: null, taxAmount: 0, total: 0 });
+      return;
+    }
+
+    previewTimeout.current = setTimeout(async () => {
+      try {
+        const payload = {
+          items: cart.map(i => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_price: i.unit_price || i.selling_price,
+            discount_applied: i.discount_applied || 0,
+            tax_rate: i.tax_rate || 15,
+            tax_exempt: i.tax_exempt || false,
+          })),
+          customer_id: selectedCustomer?.customer_id || null,
+          is_wholesale: isWholesale || false,
+        };
+        const res = await saleService.previewTotals(payload);
+        const data = res.data;
+        setSaleTotals({
+          subtotal: parseFloat(data.subtotal) || 0,
+          discountAmount: parseFloat(data.discount_amount) || 0,
+          promotion: data.promotion || null,
+          taxAmount: parseFloat(data.tax_amount) || 0,
+          total: parseFloat(data.total_amount) || 0,
+        });
+      } catch (err) {
+        // Fall back to the local (promotion-unaware) estimate rather than
+        // blocking the cashier if the preview call fails.
+        setSaleTotals({ subtotal, discountAmount: 0, promotion: null, taxAmount, total });
+      }
+    }, 350);
+
+    return () => {
+      if (previewTimeout.current) clearTimeout(previewTimeout.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, selectedCustomer, isWholesale]);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
@@ -60,9 +117,9 @@ const POS = () => {
 
     if (saleMode === 'credit' && selectedCustomer) {
       const available = parseFloat(selectedCustomer.credit_limit || 0) - parseFloat(selectedCustomer.current_balance || 0);
-      if (total > available) {
+      if (saleTotals.total > available) {
         toast.error(
-          `Sale total (${formatM(total)}) exceeds available credit (${formatM(available)}) for ${selectedCustomer.full_name}.`
+          `Sale total (${formatM(saleTotals.total)}) exceeds available credit (${formatM(available)}) for ${selectedCustomer.full_name}.`
         );
         return;
       }
@@ -83,15 +140,6 @@ const POS = () => {
     setRefreshKey(prev => prev + 1);
     setSelectedCustomer(null);
     setWholesaleMode(false);
-    
-    // Extract promotion data from transaction
-    if (tx.promotion_applied) {
-      setAppliedPromotion(tx.promotion_applied);
-      setAppliedDiscount(tx.discount_amount || 0);
-    } else {
-      setAppliedPromotion(null);
-      setAppliedDiscount(0);
-    }
   };
 
   const handleNewSale = () => {
@@ -100,8 +148,6 @@ const POS = () => {
     setSelectedCustomer(null);
     setSaleMode('cash');
     setWholesaleMode(false);
-    setAppliedPromotion(null);
-    setAppliedDiscount(0);
   };
 
   const handleSettlementSuccess = () => {
@@ -184,9 +230,6 @@ const POS = () => {
 
   const isWholesaleMode = isWholesale;
 
-  // Calculate if promotion is active
-  const hasPromotion = appliedPromotion && appliedDiscount > 0;
-
   return (
     <div className="flex h-full overflow-hidden">
 
@@ -249,9 +292,9 @@ const POS = () => {
       <div className="w-80 xl:w-96 flex-shrink-0">
         <Cart
           cart={cart}
-          subtotal={subtotal}
-          taxAmount={taxAmount}
-          total={total}
+          subtotal={saleTotals.subtotal}
+          taxAmount={saleTotals.taxAmount}
+          total={saleTotals.total}
           itemCount={itemCount}
           saleMode={saleMode}
           selectedCustomer={selectedCustomer}
@@ -262,14 +305,14 @@ const POS = () => {
           onClear={clearCart}
           onCheckout={handleCheckout}
           onHold={handleOpenHold}
-          promotion={appliedPromotion}
-          discountAmount={appliedDiscount}
+          promotion={saleTotals.promotion}
+          discountAmount={saleTotals.discountAmount}
         />
       </div>
 
       {showPayment && (
         <PaymentModal
-          total={total}
+          total={saleTotals.total}
           cart={cart}
           saleMode={saleMode}
           selectedCustomer={selectedCustomer}
@@ -283,13 +326,9 @@ const POS = () => {
         <ReceiptModal
           transaction={completedTx}
           cart={cart}
-          total={total}
-          taxAmount={taxAmount}
           isWholesale={isWholesaleMode}
           onClose={() => setCompletedTx(null)}
           onNewSale={handleNewSale}
-          promotion={appliedPromotion}
-          discountAmount={appliedDiscount}
         />
       )}
 
