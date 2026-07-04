@@ -272,13 +272,6 @@ const create = async (req, res) => {
     // Get active promotions
     const promotions = await getActivePromotions(customer_id || null);
     
-    // Calculate subtotal before any discounts
-    const subtotalBeforePromo = processedItems.reduce((sum, item) => {
-      const price = parseFloat(item.unit_price) || parseFloat(item.selling_price) || 0;
-      const qty = parseFloat(item.quantity) || 0;
-      return sum + (price * qty);
-    }, 0);
-
     // Apply best promotion using items (not total_amount)
     if (promotions.length > 0) {
       const result = applyBestPromotion(processedItems, promotions);
@@ -312,6 +305,9 @@ const create = async (req, res) => {
 
     const transactionType = payment_method;
 
+    // FIX: Save original subtotal before discount
+    const originalSubtotal = subtotal;
+
     const txResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -340,10 +336,10 @@ const create = async (req, res) => {
         req.user.full_name,
         payment_method,
         transactionType,
-        subtotal.toFixed(2),
+        originalSubtotal.toFixed(2), // Original subtotal before discount
         taxOnDiscounted.toFixed(2),
         taxRate,
-        finalTotal.toFixed(2),
+        finalTotal.toFixed(2), // Final total after discount
         paid_amount.toFixed(2),
         change_amount.toFixed(2),
         balance_due.toFixed(2),
