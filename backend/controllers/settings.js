@@ -262,7 +262,7 @@ const updateReturnSettings = async (req, res) => {
 };
 
 // ============================================================
-// PROMOTIONS SETTINGS
+// PROMOTIONS SETTINGS - FIXED
 // ============================================================
 
 const getAllPromotions = async (req, res) => {
@@ -313,7 +313,7 @@ const createPromotion = async (req, res) => {
   const {
     name,
     description,
-    discount_type,
+    promotion_type,
     discount_value,
     applies_to,
     min_purchase,
@@ -342,14 +342,14 @@ const createPromotion = async (req, res) => {
 
     const result = await client.query(
       `INSERT INTO promotions (
-        name, description, discount_type, discount_value,
+        name, description, promotion_type, discount_value,
         applies_to, min_purchase, start_date, end_date,
         is_active, created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9) RETURNING *`,
       [
         name,
         description || null,
-        discount_type || 'percentage',
+        promotion_type || 'percentage',
         discount_value,
         applies_to || 'all',
         min_purchase || 0,
@@ -361,7 +361,6 @@ const createPromotion = async (req, res) => {
 
     const promotion = result.rows[0];
 
-    // Add customers if specific
     if (customer_ids && Array.isArray(customer_ids) && customer_ids.length > 0) {
       for (const customerId of customer_ids) {
         await client.query(
@@ -402,7 +401,7 @@ const updatePromotion = async (req, res) => {
   const {
     name,
     description,
-    discount_type,
+    promotion_type,
     discount_value,
     applies_to,
     min_purchase,
@@ -434,7 +433,7 @@ const updatePromotion = async (req, res) => {
       `UPDATE promotions 
        SET name = $1,
            description = $2,
-           discount_type = $3,
+           promotion_type = $3,
            discount_value = $4,
            applies_to = $5,
            min_purchase = $6,
@@ -447,7 +446,7 @@ const updatePromotion = async (req, res) => {
       [
         name,
         description || null,
-        discount_type || 'percentage',
+        promotion_type || 'percentage',
         discount_value,
         applies_to || 'all',
         min_purchase || 0,
@@ -463,7 +462,6 @@ const updatePromotion = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Promotion not found.' });
     }
 
-    // Update customers
     await client.query(`DELETE FROM promotion_customers WHERE promotion_id = $1`, [promotionId]);
 
     if (customer_ids && Array.isArray(customer_ids) && customer_ids.length > 0) {
@@ -504,13 +502,20 @@ const updatePromotion = async (req, res) => {
 const deletePromotion = async (req, res) => {
   try {
     const promotionId = req.params.id;
+    
+    // Delete usage and customer records first
+    await pool.query(`DELETE FROM promotion_usage WHERE promotion_id = $1`, [promotionId]);
+    await pool.query(`DELETE FROM promotion_customers WHERE promotion_id = $1`, [promotionId]);
+    
     const result = await pool.query(
       `DELETE FROM promotions WHERE promotion_id = $1 RETURNING *`,
       [promotionId]
     );
+    
     if (!result.rows[0]) {
       return res.status(404).json({ success: false, message: 'Promotion not found.' });
     }
+    
     await auditLog(pool, {
       user_id: req.user.user_id,
       username: req.user.username,
@@ -519,6 +524,7 @@ const deletePromotion = async (req, res) => {
       affected_table: 'promotions',
       affected_record_id: promotionId
     });
+    
     return res.json({
       success: true,
       message: 'Promotion deleted successfully.'

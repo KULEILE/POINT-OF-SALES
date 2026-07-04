@@ -35,6 +35,8 @@ const POS = () => {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [showHeldSales, setShowHeldSales] = useState(false);
+  const [appliedPromotion, setAppliedPromotion] = useState(null);
+  const [appliedDiscount, setAppliedDiscount] = useState(0);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
@@ -81,6 +83,15 @@ const POS = () => {
     setRefreshKey(prev => prev + 1);
     setSelectedCustomer(null);
     setWholesaleMode(false);
+    
+    // Extract promotion data from transaction
+    if (tx.promotion_applied) {
+      setAppliedPromotion(tx.promotion_applied);
+      setAppliedDiscount(tx.discount_amount || 0);
+    } else {
+      setAppliedPromotion(null);
+      setAppliedDiscount(0);
+    }
   };
 
   const handleNewSale = () => {
@@ -89,6 +100,8 @@ const POS = () => {
     setSelectedCustomer(null);
     setSaleMode('cash');
     setWholesaleMode(false);
+    setAppliedPromotion(null);
+    setAppliedDiscount(0);
   };
 
   const handleSettlementSuccess = () => {
@@ -107,7 +120,6 @@ const POS = () => {
     setShowSettlement(true);
   };
 
-  // Return handlers
   const handleOpenReturn = () => {
     setShowTransactionSearch(true);
   };
@@ -124,7 +136,6 @@ const POS = () => {
     toast.success('Return processed successfully.');
   };
 
-  // Hold Sale handlers
   const handleOpenHold = () => {
     if (cart.length === 0) {
       toast.error('Cannot hold an empty cart. Please add items first.');
@@ -144,10 +155,8 @@ const POS = () => {
   };
 
   const handleResumeHeldSale = (hold) => {
-    // Restore cart from held sale data
     const cartData = hold.cart_data;
     for (const item of cartData) {
-      // Add item back to cart
       const product = {
         product_id: item.product_id,
         name: item.name,
@@ -159,9 +168,7 @@ const POS = () => {
         tax_exempt: item.tax_exempt || false,
         stock_quantity: item.stock_quantity
       };
-      // Use addToCart with the restored quantity
       addToCart(product);
-      // Update quantity if needed
       if (item.quantity > 1) {
         updateQuantity(product.product_id, item.quantity);
       }
@@ -176,6 +183,9 @@ const POS = () => {
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
   const isWholesaleMode = isWholesale;
+
+  // Calculate if promotion is active
+  const hasPromotion = appliedPromotion && appliedDiscount > 0;
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -252,6 +262,8 @@ const POS = () => {
           onClear={clearCart}
           onCheckout={handleCheckout}
           onHold={handleOpenHold}
+          promotion={appliedPromotion}
+          discountAmount={appliedDiscount}
         />
       </div>
 
@@ -276,6 +288,8 @@ const POS = () => {
           isWholesale={isWholesaleMode}
           onClose={() => setCompletedTx(null)}
           onNewSale={handleNewSale}
+          promotion={appliedPromotion}
+          discountAmount={appliedDiscount}
         />
       )}
 
@@ -297,7 +311,6 @@ const POS = () => {
         />
       )}
 
-      {/* Return Modals */}
       {showTransactionSearch && (
         <TransactionSearch
           onSelect={handleTransactionSelect}
@@ -316,7 +329,6 @@ const POS = () => {
         />
       )}
 
-      {/* Hold Sale Modals */}
       {showHoldModal && (
         <HoldSaleModal
           cart={cart}

@@ -41,7 +41,7 @@ const formatCurrency = (amount) => {
 };
 
 // ============================================================
-// PROMOTION FUNCTIONS - FIXED
+// PROMOTION FUNCTIONS
 // ============================================================
 
 const getActivePromotions = async (customer_id = null) => {
@@ -93,9 +93,9 @@ const applyBestPromotion = (items, promotions) => {
     }
 
     let discount = 0;
-    if (promo.discount_type === 'percentage') {
+    if (promo.promotion_type === 'percentage') {
       discount = subtotal * (parseFloat(promo.discount_value) / 100);
-    } else if (promo.discount_type === 'fixed') {
+    } else if (promo.promotion_type === 'fixed') {
       discount = parseFloat(promo.discount_value);
     }
 
@@ -263,7 +263,7 @@ const create = async (req, res) => {
     }
 
     // ============================================================
-    // CHECK AND APPLY PROMOTIONS - FIXED
+    // CHECK AND APPLY PROMOTIONS
     // ============================================================
     
     let appliedPromotion = null;

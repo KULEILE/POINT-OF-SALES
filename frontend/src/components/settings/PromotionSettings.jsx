@@ -15,7 +15,7 @@ const PromotionSettings = () => {
   const [form, setForm] = useState({
     name: '',
     description: '',
-    discount_type: 'percentage',
+    promotion_type: 'percentage',
     discount_value: '',
     applies_to: 'all',
     min_purchase: '',
@@ -99,7 +99,7 @@ const PromotionSettings = () => {
       setForm({
         name: '',
         description: '',
-        discount_type: 'percentage',
+        promotion_type: 'percentage',
         discount_value: '',
         applies_to: 'all',
         min_purchase: '',
@@ -118,7 +118,7 @@ const PromotionSettings = () => {
     setForm({
       name: promotion.name,
       description: promotion.description || '',
-      discount_type: promotion.discount_type,
+      promotion_type: promotion.promotion_type || 'percentage',
       discount_value: promotion.discount_value,
       applies_to: promotion.applies_to,
       min_purchase: promotion.min_purchase || '',
@@ -175,7 +175,7 @@ const PromotionSettings = () => {
             setForm({
               name: '',
               description: '',
-              discount_type: 'percentage',
+              promotion_type: 'percentage',
               discount_value: '',
               applies_to: 'all',
               min_purchase: '',
@@ -218,9 +218,9 @@ const PromotionSettings = () => {
                     <div className="font-500 text-text-primary">{p.name}</div>
                     {p.description && <div className="text-xs text-text-muted">{p.description}</div>}
                   </td>
-                  <td className="capitalize">{p.discount_type}</td>
+                  <td className="capitalize">{p.promotion_type || 'percentage'}</td>
                   <td className="font-600 text-primary">
-                    {p.discount_type === 'percentage' ? `${p.discount_value}%` : formatCurrency(p.discount_value)}
+                    {p.promotion_type === 'percentage' ? `${p.discount_value}%` : formatCurrency(p.discount_value)}
                   </td>
                   <td className="text-xs">
                     {formatDateTime(p.start_date)}<br />
@@ -277,7 +277,7 @@ const PromotionSettings = () => {
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Promotion Name <span className="text-danger"></span>
+                  Promotion Name <span className="text-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -304,12 +304,12 @@ const PromotionSettings = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    Discount Type <span className="text-danger"></span>
+                    Discount Type <span className="text-danger">*</span>
                   </label>
                   <select
                     className="k-input"
-                    value={form.discount_type}
-                    onChange={(e) => setForm({ ...form, discount_type: e.target.value })}
+                    value={form.promotion_type}
+                    onChange={(e) => setForm({ ...form, promotion_type: e.target.value })}
                   >
                     <option value="percentage">Percentage</option>
                     <option value="fixed">Fixed Amount</option>
@@ -317,12 +317,12 @@ const PromotionSettings = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    Discount Value <span className="text-danger"></span>
+                    Discount Value <span className="text-danger">*</span>
                   </label>
                   <input
                     type="number"
                     className="k-input"
-                    placeholder={form.discount_type === 'percentage' ? 'e.g., 15' : 'e.g., 50'}
+                    placeholder={form.promotion_type === 'percentage' ? 'e.g., 15' : 'e.g., 50'}
                     value={form.discount_value}
                     onChange={(e) => setForm({ ...form, discount_value: e.target.value })}
                     min="0.01"
@@ -334,7 +334,7 @@ const PromotionSettings = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    Start Date <span className="text-danger"></span>
+                    Start Date <span className="text-danger">*</span>
                   </label>
                   <input
                     type="date"
@@ -345,7 +345,7 @@ const PromotionSettings = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                    End Date <span className="text-danger"></span>
+                    End Date <span className="text-danger">*</span>
                   </label>
                   <input
                     type="date"
@@ -373,7 +373,7 @@ const PromotionSettings = () => {
 
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Applies To <span className="text-danger"></span>
+                  Applies To <span className="text-danger">*</span>
                 </label>
                 <select
                   className="k-input"
