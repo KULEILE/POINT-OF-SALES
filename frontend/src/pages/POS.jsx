@@ -17,9 +17,23 @@ import { validateCartStock } from '../utils/validators';
 
 const POS = () => {
   const {
-    cart, addToCart, removeFromCart, updateQuantity,
-    updateDiscount, clearCart, subtotal, taxAmount, total, itemCount,
-    isWholesale, setWholesaleMode
+    cart,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    updateDiscount,
+    clearCart,
+    originalSubtotal,
+    subtotal,
+    taxAmount,
+    total,
+    itemCount,
+    isWholesale,
+    setWholesaleMode,
+    appliedPromotion,
+    appliedDiscount,
+    setPromotion,
+    clearPromotion
   } = useCart();
 
   const [saleMode, setSaleMode] = useState('cash');
@@ -35,8 +49,6 @@ const POS = () => {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [showHeldSales, setShowHeldSales] = useState(false);
-  const [appliedPromotion, setAppliedPromotion] = useState(null);
-  const [appliedDiscount, setAppliedDiscount] = useState(0);
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
@@ -83,15 +95,7 @@ const POS = () => {
     setRefreshKey(prev => prev + 1);
     setSelectedCustomer(null);
     setWholesaleMode(false);
-    
-    // Extract promotion data from transaction
-    if (tx.promotion_applied) {
-      setAppliedPromotion(tx.promotion_applied);
-      setAppliedDiscount(tx.discount_amount || 0);
-    } else {
-      setAppliedPromotion(null);
-      setAppliedDiscount(0);
-    }
+    clearPromotion();
   };
 
   const handleNewSale = () => {
@@ -100,8 +104,7 @@ const POS = () => {
     setSelectedCustomer(null);
     setSaleMode('cash');
     setWholesaleMode(false);
-    setAppliedPromotion(null);
-    setAppliedDiscount(0);
+    clearPromotion();
   };
 
   const handleSettlementSuccess = () => {
@@ -147,6 +150,7 @@ const POS = () => {
   const handleHoldSuccess = () => {
     setShowHoldModal(false);
     clearCart();
+    clearPromotion();
     toast.success('Sale held successfully. You can resume it later.');
   };
 
@@ -183,8 +187,6 @@ const POS = () => {
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
   const isWholesaleMode = isWholesale;
-
-  // Calculate if promotion is active
   const hasPromotion = appliedPromotion && appliedDiscount > 0;
 
   return (
@@ -264,6 +266,7 @@ const POS = () => {
           onHold={handleOpenHold}
           promotion={appliedPromotion}
           discountAmount={appliedDiscount}
+          originalSubtotal={originalSubtotal}
         />
       </div>
 
@@ -276,6 +279,8 @@ const POS = () => {
           isWholesale={isWholesaleMode}
           onSuccess={handleSuccess}
           onClose={() => setShowPayment(false)}
+          promotion={appliedPromotion}
+          discountAmount={appliedDiscount}
         />
       )}
 
