@@ -16,7 +16,8 @@ const Cart = ({
   isWholesale,
   onHold,
   promotion,
-  discountAmount
+  discountAmount,
+  originalSubtotal
 }) => {
   // Calculate if promotion is applied
   const hasPromotion = promotion && discountAmount > 0;
@@ -73,26 +74,40 @@ const Cart = ({
       {cart.length > 0 && (
         <div className="border-t border-surface-border p-4">
           <div className="space-y-1.5 mb-4">
+            {/* Show original subtotal */}
             <div className="flex justify-between text-sm text-text-muted">
               <span>Subtotal</span>
-              <span>{formatCurrency(subtotal)}</span>
+              <span>{formatCurrency(originalSubtotal || subtotal)}</span>
             </div>
-            {isWholesale && (
-              <div className="flex justify-between text-sm text-text-muted">
-                <span>Sale Type</span>
-                <span className="text-primary font-600">Wholesale</span>
-              </div>
-            )}
+            
+            {/* Show promotion discount if applied */}
             {hasPromotion && (
               <div className="flex justify-between text-sm text-success">
                 <span>Promotion: {promotion?.name}</span>
                 <span>-{formatCurrency(discountAmount)}</span>
               </div>
             )}
+            
+            {/* Show discounted subtotal if promotion applied */}
+            {hasPromotion && (
+              <div className="flex justify-between text-sm text-text-muted text-[10px]">
+                <span>Discounted Subtotal</span>
+                <span>{formatCurrency((originalSubtotal || subtotal) - discountAmount)}</span>
+              </div>
+            )}
+            
+            {isWholesale && (
+              <div className="flex justify-between text-sm text-text-muted">
+                <span>Sale Type</span>
+                <span className="text-primary font-600">Wholesale</span>
+              </div>
+            )}
+            
             <div className="flex justify-between text-sm text-text-muted">
               <span>VAT (15%)</span>
               <span>{formatCurrency(taxAmount)}</span>
             </div>
+            
             <div className="flex justify-between text-base font-700 text-text-primary border-t border-surface-border pt-2 mt-2">
               <span>TOTAL</span>
               <span className="text-primary">{formatCurrency(total)}</span>

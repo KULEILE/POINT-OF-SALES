@@ -19,7 +19,17 @@ const DURATION_OPTIONS = [
   { value: 90, label: '90 days' },
 ];
 
-const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, onSuccess, onClose }) => {
+const PaymentModal = ({ 
+  total, 
+  cart, 
+  saleMode, 
+  selectedCustomer, 
+  isWholesale, 
+  onSuccess, 
+  onClose,
+  promotion,
+  discountAmount 
+}) => {
   const [method, setMethod] = useState('cash');
   const [paid, setPaid] = useState('');
   const [deposit, setDeposit] = useState('');
@@ -44,6 +54,8 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
     date.setDate(date.getDate() + duration);
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
+
+  const hasPromotion = promotion && discountAmount > 0;
 
   const canSubmit = (() => {
     if (isCashSale && method === 'cash') return parseFloat(paid) >= total;
@@ -156,6 +168,9 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
             <p className="text-sm text-primary font-600 mt-0.5">Total: {formatCurrency(total)}</p>
             {isWholesale && (
               <p className="text-xs text-primary font-500">Wholesale Mode</p>
+            )}
+            {hasPromotion && (
+              <p className="text-xs text-success font-500">Promotion Applied</p>
             )}
           </div>
           <button
@@ -358,6 +373,12 @@ const PaymentModal = ({ total, cart, saleMode, selectedCustomer, isWholesale, on
                 {isCreditSale ? 'Credit' : isLaybySale ? 'Lay-by' : isWholesale ? 'Wholesale' : method}
               </span>
             </div>
+            {hasPromotion && (
+              <div className="flex justify-between text-sm mt-1 text-success">
+                <span>Promotion</span>
+                <span>{promotion?.name} (-{formatCurrency(discountAmount)})</span>
+              </div>
+            )}
             {(isCreditSale || isLaybySale) && (
               <div className="flex justify-between text-sm mt-1">
                 <span className="text-text-muted">Duration</span>

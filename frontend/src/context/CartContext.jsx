@@ -5,6 +5,8 @@ const CartContext = createContext(null);
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([]);
   const [isWholesale, setIsWholesale] = useState(false);
+  const [appliedPromotion, setAppliedPromotion] = useState(null);
+  const [appliedDiscount, setAppliedDiscount] = useState(0);
 
   const addToCart = useCallback((product, wholesale = false) => {
     setCart(prev => {
@@ -43,20 +45,44 @@ export const CartProvider = ({ children }) => {
     setIsWholesale(value);
   }, []);
 
-  const subtotal = cart.reduce((s, i) => {
+  // Calculate original subtotal (before any discounts)
+  const originalSubtotal = cart.reduce((s, i) => {
     const price = i.unit_price || i.selling_price;
-    return s + price * i.quantity * (1 - i.discount_applied / 100);
+    return s + price * i.quantity;
   }, 0);
 
+  // Tax is calculated on the discounted amount
+  // First apply any discount from the item level, then promotion
+  const subtotal = cart.reduce((s, i) => {
+    const price = i.unit_price || i.selling_price;
+    const itemDiscount = i.discount_applied || 0;
+    const discountedPrice = price * (1 - itemDiscount / 100);
+    return s + discountedPrice * i.quantity;
+  }, 0);
+
+  // Calculate tax on the amount after promotion discount
   const taxAmount = cart.reduce((s, i) => {
     if (i.tax_exempt) return s;
     const price = i.unit_price || i.selling_price;
-    const base = price * i.quantity * (1 - i.discount_applied / 100);
+    const itemDiscount = i.discount_applied || 0;
+    const discountedPrice = price * (1 - itemDiscount / 100);
+    const base = discountedPrice * i.quantity;
     return s + base * (i.tax_rate || 15) / 100;
   }, 0);
 
-  const total = subtotal + taxAmount;
+  // Final total = original subtotal - promotion discount + tax
+  const total = (originalSubtotal - appliedDiscount) + taxAmount;
   const itemCount = cart.reduce((s, i) => s + i.quantity, 0);
+
+  const setPromotion = useCallback((promotion, discount) => {
+    setAppliedPromotion(promotion);
+    setAppliedDiscount(discount || 0);
+  }, []);
+
+  const clearPromotion = useCallback(() => {
+    setAppliedPromotion(null);
+    setAppliedDiscount(0);
+  }, []);
 
   return (
     <CartContext.Provider value={{ 
@@ -66,12 +92,17 @@ export const CartProvider = ({ children }) => {
       updateQuantity, 
       updateDiscount, 
       clearCart, 
-      subtotal, 
+      originalSubtotal,
+      subtotal: originalSubtotal - appliedDiscount,
       taxAmount, 
-      total, 
+      total: (originalSubtotal - appliedDiscount) + taxAmount,
       itemCount,
       isWholesale,
-      setWholesaleMode
+      setWholesaleMode,
+      appliedPromotion,
+      appliedDiscount,
+      setPromotion,
+      clearPromotion
     }}>
       {children}
     </CartContext.Provider>

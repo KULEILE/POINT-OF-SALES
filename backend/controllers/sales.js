@@ -342,9 +342,9 @@ const create = async (req, res) => {
         payment_method,
         transactionType,
         displaySubtotal.toFixed(2), // Original subtotal before discount
-        taxOnDiscounted.toFixed(2),
+        taxOnDiscounted.toFixed(2), // Tax calculated on discounted amount
         taxRate,
-        finalTotal.toFixed(2), // Final total after discount
+        finalTotal.toFixed(2), // Final total after discount + tax
         paid_amount.toFixed(2),
         change_amount.toFixed(2),
         balance_due.toFixed(2),
