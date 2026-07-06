@@ -9,7 +9,9 @@ const ReceiptModal = ({
   onClose, 
   onNewSale, 
   paymentType,
-  isWholesale 
+  isWholesale,
+  promotion,
+  discountAmount
 }) => {
   const isPaymentReceipt = paymentType === 'credit' || paymentType === 'layby';
   const isCreditPayment = paymentType === 'credit';
@@ -19,6 +21,23 @@ const ReceiptModal = ({
   const isCreditOrLaybySale = transaction?.payment_method === 'credit' || transaction?.payment_method === 'layby';
 
   const receiptTitle = isWholesale ? 'WHOLESALE INVOICE' : 'SALE RECEIPT';
+
+  // Get promotion data from transaction or props
+  const promoName = promotion?.name || transaction?.promotion_name || null;
+  const promoDiscount = discountAmount || transaction?.discount_amount || 0;
+  const hasPromotion = promoName && promoDiscount > 0;
+
+  // Use subtotal from transaction record (original subtotal before discount)
+  const subtotalFromTransaction = transaction?.subtotal || 0;
+
+  // Calculate original subtotal from cart if transaction subtotal is not available
+  const calculatedSubtotal = cart.reduce((sum, item) => {
+    const price = item.unit_price || item.selling_price || 0;
+    const qty = item.quantity || 0;
+    return sum + (price * qty);
+  }, 0);
+
+  const displaySubtotal = subtotalFromTransaction || calculatedSubtotal;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -34,6 +53,11 @@ const ReceiptModal = ({
           {isWholesale && !isPaymentReceipt && (
             <span className="text-xs font-600 bg-primary/10 text-primary px-2 py-0.5 rounded-full mt-1 inline-block">
               Wholesale
+            </span>
+          )}
+          {hasPromotion && !isPaymentReceipt && (
+            <span className="text-xs font-600 bg-success/10 text-success px-2 py-0.5 rounded-full mt-1 inline-block">
+              Promotion Applied
             </span>
           )}
           {isPaymentReceipt && (
@@ -71,7 +95,6 @@ const ReceiptModal = ({
                   <span className="font-600 text-primary">Wholesale</span>
                 </div>
               )}
-              {/* Duration and Due Date - ONLY for Credit and Layby sales */}
               {isCreditOrLaybySale && (transaction?.duration_days || transaction?.due_date) && (
                 <div className="flex justify-between">
                   <span>Duration:</span>
@@ -127,10 +150,28 @@ const ReceiptModal = ({
                 <div className="border-t border-dashed border-surface-border my-2" />
 
                 <div className="space-y-1">
+                  {/* Show original subtotal */}
                   <div className="flex justify-between text-text-muted">
                     <span>Subtotal</span>
-                    <span className="w-24 text-right">{formatCurrency(total - taxAmount)}</span>
+                    <span className="w-24 text-right">{formatCurrency(displaySubtotal)}</span>
                   </div>
+                  
+                  {/* Show promotion discount if applied */}
+                  {hasPromotion && (
+                    <div className="flex justify-between text-success text-[10px]">
+                      <span>Promotion: {promoName}</span>
+                      <span>-{formatCurrency(promoDiscount)}</span>
+                    </div>
+                  )}
+                  
+                  {/* Show discounted subtotal if promotion applied */}
+                  {hasPromotion && (
+                    <div className="flex justify-between text-text-muted text-[10px]">
+                      <span>Discounted Subtotal</span>
+                      <span className="w-24 text-right">{formatCurrency(displaySubtotal - promoDiscount)}</span>
+                    </div>
+                  )}
+                  
                   <div className="flex justify-between text-text-muted">
                     <span>VAT ({transaction?.tax_rate || 15}%)</span>
                     <span className="w-24 text-right">{formatCurrency(taxAmount)}</span>

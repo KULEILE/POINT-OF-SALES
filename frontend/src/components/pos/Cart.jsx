@@ -17,89 +17,94 @@ const Cart = ({
   onHold,
   promotion,
   discountAmount
-}) => (
-  <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
-    <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
-      <div>
-        <h2 className="text-sm font-700 text-text-primary">Current Sale</h2>
-        <p className="text-xs text-text-muted">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
-        {isWholesale && (
-          <span className="text-xs text-primary font-600">Wholesale Mode</span>
-        )}
-        {promotion && (
-          <span className="text-xs text-success font-600 ml-1">Promotion Applied</span>
-        )}
-      </div>
-      <div className="flex gap-2">
-        {cart.length > 0 && (
-          <button 
-            onClick={onHold}
-            className="text-xs text-primary border border-primary/30 hover:border-primary px-2 py-1 rounded-md transition-all"
-          >
-            Hold Sale
-          </button>
-        )}
-        <button onClick={onClear} className="text-xs text-text-faint hover:text-danger border border-surface-border hover:border-danger/50 px-2 py-1 rounded-md transition-all">
-          Clear
-        </button>
-      </div>
-    </div>
+}) => {
+  // Calculate if promotion is applied
+  const hasPromotion = promotion && discountAmount > 0;
 
-    <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-      {cart.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-text-faint">
-          <p className="text-3xl mb-2">—</p>
-          <p className="text-sm font-500">Cart is empty</p>
-          <p className="text-xs mt-1">Add products to start a sale</p>
+  return (
+    <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
+      <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-700 text-text-primary">Current Sale</h2>
+          <p className="text-xs text-text-muted">{itemCount} item{itemCount !== 1 ? 's' : ''}</p>
+          {isWholesale && (
+            <span className="text-xs text-primary font-600">Wholesale Mode</span>
+          )}
+          {hasPromotion && (
+            <span className="text-xs text-success font-600 ml-1">Promotion Applied</span>
+          )}
         </div>
-      ) : (
-        cart.map(item => (
-          <CartItem 
-            key={item.product_id} 
-            item={item} 
-            onUpdateQty={onUpdateQty} 
-            onRemove={onRemove} 
-            onUpdateDiscount={onUpdateDiscount}
-            isWholesale={isWholesale}
-          />
-        ))
+        <div className="flex gap-2">
+          {cart.length > 0 && (
+            <button 
+              onClick={onHold}
+              className="text-xs text-primary border border-primary/30 hover:border-primary px-2 py-1 rounded-md transition-all"
+            >
+              Hold Sale
+            </button>
+          )}
+          <button onClick={onClear} className="text-xs text-text-faint hover:text-danger border border-surface-border hover:border-danger/50 px-2 py-1 rounded-md transition-all">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+        {cart.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-text-faint">
+            <p className="text-3xl mb-2">—</p>
+            <p className="text-sm font-500">Cart is empty</p>
+            <p className="text-xs mt-1">Add products to start a sale</p>
+          </div>
+        ) : (
+          cart.map(item => (
+            <CartItem 
+              key={item.product_id} 
+              item={item} 
+              onUpdateQty={onUpdateQty} 
+              onRemove={onRemove} 
+              onUpdateDiscount={onUpdateDiscount}
+              isWholesale={isWholesale}
+            />
+          ))
+        )}
+      </div>
+
+      {cart.length > 0 && (
+        <div className="border-t border-surface-border p-4">
+          <div className="space-y-1.5 mb-4">
+            <div className="flex justify-between text-sm text-text-muted">
+              <span>Subtotal</span>
+              <span>{formatCurrency(subtotal)}</span>
+            </div>
+            {isWholesale && (
+              <div className="flex justify-between text-sm text-text-muted">
+                <span>Sale Type</span>
+                <span className="text-primary font-600">Wholesale</span>
+              </div>
+            )}
+            {hasPromotion && (
+              <div className="flex justify-between text-sm text-success">
+                <span>Promotion: {promotion?.name}</span>
+                <span>-{formatCurrency(discountAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm text-text-muted">
+              <span>VAT (15%)</span>
+              <span>{formatCurrency(taxAmount)}</span>
+            </div>
+            <div className="flex justify-between text-base font-700 text-text-primary border-t border-surface-border pt-2 mt-2">
+              <span>TOTAL</span>
+              <span className="text-primary">{formatCurrency(total)}</span>
+            </div>
+          </div>
+          <button onClick={onCheckout} className="k-btn-primary w-full py-3.5 text-sm">
+            Process Payment
+          </button>
+        </div>
       )}
     </div>
-
-    {cart.length > 0 && (
-      <div className="border-t border-surface-border p-4">
-        <div className="space-y-1.5 mb-4">
-          <div className="flex justify-between text-sm text-text-muted">
-            <span>Subtotal</span>
-            <span>{formatCurrency(subtotal)}</span>
-          </div>
-          {isWholesale && (
-            <div className="flex justify-between text-sm text-text-muted">
-              <span>Sale Type</span>
-              <span className="text-primary font-600">Wholesale</span>
-            </div>
-          )}
-          {promotion && discountAmount > 0 && (
-            <div className="flex justify-between text-sm text-success">
-              <span>Promotion: {promotion.name}</span>
-              <span>-{formatCurrency(discountAmount)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-sm text-text-muted">
-            <span>VAT (15%)</span>
-            <span>{formatCurrency(taxAmount)}</span>
-          </div>
-          <div className="flex justify-between text-base font-700 text-text-primary border-t border-surface-border pt-2 mt-2">
-            <span>TOTAL</span>
-            <span className="text-primary">{formatCurrency(total)}</span>
-          </div>
-        </div>
-        <button onClick={onCheckout} className="k-btn-primary w-full py-3.5 text-sm">
-          Process Payment
-        </button>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 export default Cart;

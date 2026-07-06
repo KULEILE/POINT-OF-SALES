@@ -177,6 +177,7 @@ const create = async (req, res) => {
     const tiers = await getDiscountTiers();
 
     let subtotal = 0, total_tax = 0;
+    let originalSubtotal = 0;
     const processedItems = [];
 
     for (const item of items) {
@@ -220,6 +221,10 @@ const create = async (req, res) => {
 
       let unitPrice = parseFloat(item.unit_price) || parseFloat(product.selling_price);
       let discountApplied = parseFloat(item.discount_applied) || 0;
+
+      // Track original price before any discounts
+      const originalPrice = parseFloat(product.selling_price) || 0;
+      originalSubtotal += originalPrice * requested;
 
       if (isWholesale && product.wholesale_price) {
         const wholesaleResult = calculateWholesalePrice(product, requested, settings, tiers);
@@ -305,8 +310,8 @@ const create = async (req, res) => {
 
     const transactionType = payment_method;
 
-    // FIX: Save original subtotal before discount
-    const originalSubtotal = subtotal;
+    // Save original subtotal for receipt display
+    const displaySubtotal = originalSubtotal;
 
     const txResult = await client.query(
       `INSERT INTO transactions (
@@ -336,7 +341,7 @@ const create = async (req, res) => {
         req.user.full_name,
         payment_method,
         transactionType,
-        originalSubtotal.toFixed(2), // Original subtotal before discount
+        displaySubtotal.toFixed(2), // Original subtotal before discount
         taxOnDiscounted.toFixed(2),
         taxRate,
         finalTotal.toFixed(2), // Final total after discount
