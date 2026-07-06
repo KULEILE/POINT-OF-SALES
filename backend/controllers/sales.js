@@ -88,7 +88,8 @@ const applyBestPromotion = (items, promotions) => {
   for (const promo of promotions) {
     // Check minimum purchase against subtotal
     const minPurchase = parseFloat(promo.min_purchase) || 0;
-    if (minPurchase > 0 && subtotal <= minPurchase) {
+    // FIXED: Changed from <= to < so that exact match qualifies
+    if (minPurchase > 0 && subtotal < minPurchase) {
       continue;
     }
 
