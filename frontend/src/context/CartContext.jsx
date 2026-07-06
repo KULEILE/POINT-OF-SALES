@@ -48,30 +48,27 @@ export const CartProvider = ({ children }) => {
   // Calculate original subtotal (before any discounts)
   const originalSubtotal = cart.reduce((s, i) => {
     const price = i.unit_price || i.selling_price;
-    return s + price * i.quantity;
+    return s + price * i.quantity * (1 - (i.discount_applied || 0) / 100);
   }, 0);
 
-  // Tax is calculated on the discounted amount
-  // First apply any discount from the item level, then promotion
-  const subtotal = cart.reduce((s, i) => {
-    const price = i.unit_price || i.selling_price;
-    const itemDiscount = i.discount_applied || 0;
-    const discountedPrice = price * (1 - itemDiscount / 100);
-    return s + discountedPrice * i.quantity;
-  }, 0);
+  // Apply promotion discount BEFORE tax
+  const discountedSubtotal = Math.max(0, originalSubtotal - appliedDiscount);
 
-  // Calculate tax on the amount after promotion discount
+  // Calculate tax on discounted amount
   const taxAmount = cart.reduce((s, i) => {
     if (i.tax_exempt) return s;
     const price = i.unit_price || i.selling_price;
     const itemDiscount = i.discount_applied || 0;
     const discountedPrice = price * (1 - itemDiscount / 100);
     const base = discountedPrice * i.quantity;
-    return s + base * (i.tax_rate || 15) / 100;
+    // Apply promotion proportionally to each item
+    const itemShare = originalSubtotal > 0 ? (base / originalSubtotal) : 0;
+    const itemDiscounted = base - (appliedDiscount * itemShare);
+    return s + itemDiscounted * (i.tax_rate || 15) / 100;
   }, 0);
 
-  // Final total = original subtotal - promotion discount + tax
-  const total = (originalSubtotal - appliedDiscount) + taxAmount;
+  // Final total = discounted subtotal + tax on discounted amount
+  const total = discountedSubtotal + taxAmount;
   const itemCount = cart.reduce((s, i) => s + i.quantity, 0);
 
   const setPromotion = useCallback((promotion, discount) => {
@@ -93,9 +90,9 @@ export const CartProvider = ({ children }) => {
       updateDiscount, 
       clearCart, 
       originalSubtotal,
-      subtotal: originalSubtotal - appliedDiscount,
+      subtotal: discountedSubtotal,
       taxAmount, 
-      total: (originalSubtotal - appliedDiscount) + taxAmount,
+      total,
       itemCount,
       isWholesale,
       setWholesaleMode,

@@ -27,17 +27,15 @@ const ReceiptModal = ({
   const promoDiscount = discountAmount || transaction?.discount_amount || 0;
   const hasPromotion = promoName && promoDiscount > 0;
 
-  // Use subtotal from transaction record (original subtotal before discount)
-  const subtotalFromTransaction = transaction?.subtotal || 0;
-
-  // Calculate original subtotal from cart if transaction subtotal is not available
+  // Calculate original subtotal from cart
   const calculatedSubtotal = cart.reduce((sum, item) => {
     const price = item.unit_price || item.selling_price || 0;
     const qty = item.quantity || 0;
     return sum + (price * qty);
   }, 0);
 
-  const displaySubtotal = subtotalFromTransaction || calculatedSubtotal;
+  // Use subtotal from transaction or calculated
+  const displaySubtotal = transaction?.subtotal || calculatedSubtotal;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">

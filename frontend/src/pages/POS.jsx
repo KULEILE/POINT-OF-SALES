@@ -32,7 +32,6 @@ const POS = () => {
     setWholesaleMode,
     appliedPromotion,
     appliedDiscount,
-    setPromotion,
     clearPromotion
   } = useCart();
 
