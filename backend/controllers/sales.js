@@ -74,21 +74,21 @@ const getActivePromotions = async (customer_id = null) => {
   return result.rows;
 };
 
-const applyBestPromotion = (items, promotions) => {
+/**
+ * Picks the single best promotion for this cart.
+ * IMPORTANT: `subtotal` here is the PRE-TAX subtotal, after per-item
+ * discount_applied has already been factored in (i.e. processedItems'
+ * line_subtotal). This must match the subtotal accumulated in create(),
+ * or promotion min_purchase checks and discount amounts will be wrong.
+ */
+const applyBestPromotion = (processedItems, promotions) => {
   let bestPromotion = null;
   let bestDiscount = 0;
 
-  // Calculate subtotal from items (before any discounts)
-  const subtotal = items.reduce((sum, item) => {
-    const price = parseFloat(item.unit_price) || parseFloat(item.selling_price) || 0;
-    const qty = parseFloat(item.quantity) || 0;
-    return sum + (price * qty);
-  }, 0);
+  const subtotal = processedItems.reduce((sum, item) => sum + (item.line_subtotal || 0), 0);
 
   for (const promo of promotions) {
-    // Check minimum purchase against subtotal
     const minPurchase = parseFloat(promo.min_purchase) || 0;
-    // FIXED: Changed from <= to < so that exact match qualifies
     if (minPurchase > 0 && subtotal < minPurchase) {
       continue;
     }
@@ -100,7 +100,7 @@ const applyBestPromotion = (items, promotions) => {
       discount = parseFloat(promo.discount_value);
     }
 
-    // Cap discount at total
+    // Cap discount at subtotal (never discount more than 100% of pre-tax value)
     discount = Math.min(discount, subtotal);
 
     if (discount > bestDiscount) {
@@ -177,7 +177,8 @@ const create = async (req, res) => {
     const settings = await getWholesaleSettings();
     const tiers = await getDiscountTiers();
 
-    let subtotal = 0, total_tax = 0;
+    // subtotal = PRE-TAX, post item-level-discount, pre-promotion subtotal
+    let subtotal = 0;
     let originalSubtotal = 0;
     const processedItems = [];
 
@@ -223,7 +224,7 @@ const create = async (req, res) => {
       let unitPrice = parseFloat(item.unit_price) || parseFloat(product.selling_price);
       let discountApplied = parseFloat(item.discount_applied) || 0;
 
-      // Track original price before any discounts
+      // Track original price before any discounts (for receipt display)
       const originalPrice = parseFloat(product.selling_price) || 0;
       originalSubtotal += originalPrice * requested;
 
@@ -234,20 +235,56 @@ const create = async (req, res) => {
       }
 
       const base = unitPrice * requested;
-      const discounted = base * (1 - (discountApplied || 0) / 100);
-      const tax = item.tax_exempt ? 0 : discounted * (parseFloat(item.tax_rate) || 15) / 100;
-      
-      subtotal += discounted;
-      total_tax += tax;
+      const lineSubtotal = base * (1 - (discountApplied || 0) / 100); // pre-tax, post item-discount
+
+      subtotal += lineSubtotal;
 
       processedItems.push({
         ...item,
         unit_price: unitPrice,
-        discount_applied: discountApplied
+        discount_applied: discountApplied,
+        quantity: requested,
+        line_subtotal: lineSubtotal,
+        tax_rate: parseFloat(item.tax_rate) || 15,
+        tax_exempt: !!item.tax_exempt,
       });
     }
 
-    const total_amount = subtotal + total_tax;
+    // ============================================================
+    // APPLY PROMOTIONS - BEFORE TAX
+    // (must happen before any tax is calculated, since tax is only
+    // ever charged on the amount the customer actually pays)
+    // ============================================================
+
+    let appliedPromotion = null;
+    let appliedDiscount = 0;
+
+    const promotions = await getActivePromotions(customer_id || null);
+    if (promotions.length > 0) {
+      const result = applyBestPromotion(processedItems, promotions);
+      appliedPromotion = result.promotion;
+      appliedDiscount = result.discount;
+    }
+
+    // Pre-tax subtotal after the promotion discount has been removed
+    const discountedSubtotal = Math.max(0, subtotal - appliedDiscount);
+
+    // ============================================================
+    // TAX - calculated ONLY on the post-promotion amount, per item,
+    // respecting each item's own tax rate / exemption. The promotion
+    // discount is distributed across items proportionally so exempt
+    // items and different tax rates are still respected correctly.
+    // ============================================================
+
+    let total_tax = 0;
+    for (const item of processedItems) {
+      if (item.tax_exempt) continue;
+      const itemShare = subtotal > 0 ? (item.line_subtotal / subtotal) : 0;
+      const itemDiscountedAfterPromo = item.line_subtotal - (appliedDiscount * itemShare);
+      total_tax += itemDiscountedAfterPromo * (item.tax_rate / 100);
+    }
+
+    const finalTotal = discountedSubtotal + total_tax;
 
     if (payment_method === 'credit' && customer_id) {
       const custCheck = await client.query(
@@ -258,46 +295,16 @@ const create = async (req, res) => {
         const available_credit =
           parseFloat(custCheck.rows[0].credit_limit || 0) -
           parseFloat(custCheck.rows[0].current_balance || 0);
-        if (total_amount > available_credit) {
+        // Compare against the POST-PROMOTION total, not the pre-discount amount
+        if (finalTotal > available_credit) {
           await client.query('ROLLBACK');
           return res.status(400).json({
             success: false,
-            message: `Credit limit exceeded for ${custCheck.rows[0].full_name}. Available credit is ${formatCurrency(available_credit)}, but the sale total is ${formatCurrency(total_amount)}.`,
+            message: `Credit limit exceeded for ${custCheck.rows[0].full_name}. Available credit is ${formatCurrency(available_credit)}, but the sale total is ${formatCurrency(finalTotal)}.`,
           });
         }
       }
     }
-
-    // ============================================================
-    // CHECK AND APPLY PROMOTIONS - BEFORE TAX
-    // ============================================================
-    
-    let appliedPromotion = null;
-    let appliedDiscount = 0;
-
-    // Get active promotions
-    const promotions = await getActivePromotions(customer_id || null);
-    
-    // Calculate subtotal before any discounts for promotion check
-    const subtotalBeforePromo = processedItems.reduce((sum, item) => {
-      const price = parseFloat(item.unit_price) || parseFloat(item.selling_price) || 0;
-      const qty = parseFloat(item.quantity) || 0;
-      return sum + (price * qty);
-    }, 0);
-
-    // Apply best promotion using items (not total_amount)
-    if (promotions.length > 0) {
-      const result = applyBestPromotion(processedItems, promotions);
-      appliedPromotion = result.promotion;
-      appliedDiscount = result.discount;
-    }
-
-    // Calculate final total after promotion - SUBTRACT the discount
-    const finalTotal = Math.max(0, total_amount - appliedDiscount);
-    
-    // Recalculate tax based on discounted total
-    const taxRate = 15;
-    const taxOnDiscounted = finalTotal * (taxRate / 100);
 
     const deposit = parseFloat(deposit_amount) || 0;
     const change_amount =
@@ -349,10 +356,10 @@ const create = async (req, res) => {
         req.user.full_name,
         payment_method,
         transactionType,
-        displaySubtotal.toFixed(2),      // Original subtotal before discount
-        taxOnDiscounted.toFixed(2),      // Tax calculated on discounted amount
-        taxRate,
-        finalTotal.toFixed(2),           // Final total after discount + tax
+        displaySubtotal.toFixed(2),   // Original subtotal before any discount (display only)
+        total_tax.toFixed(2),         // Tax calculated on the POST-PROMOTION amount
+        15,
+        finalTotal.toFixed(2),        // discountedSubtotal + total_tax — no double taxation
         paid_amount.toFixed(2),
         change_amount.toFixed(2),
         balance_due.toFixed(2),
