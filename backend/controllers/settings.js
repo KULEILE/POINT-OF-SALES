@@ -262,7 +262,7 @@ const updateReturnSettings = async (req, res) => {
 };
 
 // ============================================================
-// PROMOTIONS SETTINGS - FIXED
+// PROMOTIONS SETTINGS - CRUD
 // ============================================================
 
 const getAllPromotions = async (req, res) => {
@@ -319,7 +319,11 @@ const createPromotion = async (req, res) => {
     min_purchase,
     start_date,
     end_date,
-    customer_ids
+    customer_ids,
+    min_quantity,
+    priority,
+    applies_to_wholesale,
+    applies_to_retail
   } = req.body;
 
   if (!name || discount_value == null || !start_date || !end_date) {
@@ -344,8 +348,9 @@ const createPromotion = async (req, res) => {
       `INSERT INTO promotions (
         name, description, promotion_type, discount_value,
         applies_to, min_purchase, start_date, end_date,
+        min_quantity, priority, applies_to_wholesale, applies_to_retail,
         is_active, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9) RETURNING *`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE, $13) RETURNING *`,
       [
         name,
         description || null,
@@ -355,6 +360,10 @@ const createPromotion = async (req, res) => {
         min_purchase || 0,
         start_date,
         end_date,
+        min_quantity || 1,
+        priority || 0,
+        applies_to_wholesale !== undefined ? applies_to_wholesale : true,
+        applies_to_retail !== undefined ? applies_to_retail : true,
         req.user.user_id
       ]
     );
@@ -408,7 +417,11 @@ const updatePromotion = async (req, res) => {
     start_date,
     end_date,
     is_active,
-    customer_ids
+    customer_ids,
+    min_quantity,
+    priority,
+    applies_to_wholesale,
+    applies_to_retail
   } = req.body;
 
   if (!name || discount_value == null || !start_date || !end_date) {
@@ -440,8 +453,12 @@ const updatePromotion = async (req, res) => {
            start_date = $7,
            end_date = $8,
            is_active = $9,
+           min_quantity = $10,
+           priority = $11,
+           applies_to_wholesale = $12,
+           applies_to_retail = $13,
            updated_at = NOW()
-       WHERE promotion_id = $10
+       WHERE promotion_id = $14
        RETURNING *`,
       [
         name,
@@ -453,6 +470,10 @@ const updatePromotion = async (req, res) => {
         start_date,
         end_date,
         is_active !== undefined ? is_active : true,
+        min_quantity || 1,
+        priority || 0,
+        applies_to_wholesale !== undefined ? applies_to_wholesale : true,
+        applies_to_retail !== undefined ? applies_to_retail : true,
         promotionId
       ]
     );
@@ -503,7 +524,6 @@ const deletePromotion = async (req, res) => {
   try {
     const promotionId = req.params.id;
     
-    // Delete usage and customer records first
     await pool.query(`DELETE FROM promotion_usage WHERE promotion_id = $1`, [promotionId]);
     await pool.query(`DELETE FROM promotion_customers WHERE promotion_id = $1`, [promotionId]);
     
@@ -535,6 +555,223 @@ const deletePromotion = async (req, res) => {
   }
 };
 
+// ============================================================
+// PROMOTIONS - FRONTEND ENDPOINTS (NEW)
+// ============================================================
+
+const getActivePromotionsForFrontend = async (req, res) => {
+  try {
+    const customerId = req.query.customer_id || null;
+    const isWholesale = req.query.is_wholesale === 'true';
+    
+    let query = `
+      SELECT p.*, 
+             COUNT(DISTINCT pc.customer_id) as customer_count,
+             (SELECT COUNT(*) FROM promotion_usage pu 
+              WHERE pu.promotion_id = p.promotion_id) as usage_count
+      FROM promotions p
+      LEFT JOIN promotion_customers pc ON p.promotion_id = pc.promotion_id
+      WHERE p.is_active = TRUE
+        AND NOW() BETWEEN p.start_date AND p.end_date
+    `;
+    
+    const params = [];
+    
+    // Filter by wholesale/retail
+    if (isWholesale) {
+      query += ` AND p.applies_to_wholesale = TRUE`;
+    } else {
+      query += ` AND p.applies_to_retail = TRUE`;
+    }
+    
+    // Filter by customer eligibility
+    if (customerId) {
+      query += `
+        AND (
+          p.applies_to = 'all'
+          OR EXISTS (
+            SELECT 1 FROM promotion_customers pc2 
+            WHERE pc2.promotion_id = p.promotion_id 
+            AND pc2.customer_id = $1
+          )
+        )
+      `;
+      params.push(customerId);
+    } else {
+      query += ` AND p.applies_to = 'all'`;
+    }
+    
+    query += ` GROUP BY p.promotion_id ORDER BY p.priority DESC, p.discount_value DESC`;
+    
+    const result = await pool.query(query, params);
+    
+    return res.json({ 
+      success: true, 
+      promotions: result.rows 
+    });
+  } catch (err) {
+    console.error('[getActivePromotionsForFrontend]', err.message);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch promotions' 
+    });
+  }
+};
+
+const calculateCartPromotion = async (req, res) => {
+  const { items, customer_id, subtotal, is_wholesale } = req.body;
+  
+  if (!items || !items.length) {
+    return res.json({ 
+      success: true, 
+      promotion: null, 
+      discount: 0 
+    });
+  }
+
+  try {
+    let query = `
+      SELECT * FROM promotions p
+      WHERE p.is_active = TRUE
+        AND NOW() BETWEEN p.start_date AND p.end_date
+    `;
+    
+    const params = [];
+    
+    // Filter by wholesale/retail
+    if (is_wholesale) {
+      query += ` AND p.applies_to_wholesale = TRUE`;
+    } else {
+      query += ` AND p.applies_to_retail = TRUE`;
+    }
+    
+    // Filter by customer eligibility
+    if (customer_id) {
+      query += `
+        AND (
+          p.applies_to = 'all'
+          OR EXISTS (
+            SELECT 1 FROM promotion_customers pc 
+            WHERE pc.promotion_id = p.promotion_id 
+            AND pc.customer_id = $1
+          )
+        )
+      `;
+      params.push(customer_id);
+    } else {
+      query += ` AND p.applies_to = 'all'`;
+    }
+    
+    query += ` ORDER BY p.priority DESC, p.discount_value DESC`;
+    
+    const result = await pool.query(query, params);
+    const promotions = result.rows;
+    
+    if (!promotions.length) {
+      return res.json({ 
+        success: true, 
+        promotion: null, 
+        discount: 0 
+      });
+    }
+
+    // Calculate cart subtotal
+    const cartSubtotal = subtotal || items.reduce((sum, item) => {
+      const price = parseFloat(item.unit_price) || 0;
+      const qty = parseFloat(item.quantity) || 0;
+      const discount = parseFloat(item.discount_applied) || 0;
+      return sum + (price * qty * (1 - discount / 100));
+    }, 0);
+
+    let bestPromotion = null;
+    let bestDiscount = 0;
+
+    for (const promo of promotions) {
+      const minPurchase = parseFloat(promo.min_purchase) || 0;
+      const minQuantity = parseInt(promo.min_quantity) || 1;
+      
+      // Check minimum purchase amount
+      if (minPurchase > 0 && cartSubtotal < minPurchase) {
+        continue;
+      }
+      
+      // Check minimum quantity (if any item meets the min quantity)
+      if (minQuantity > 1) {
+        const hasMinQuantity = items.some(item => {
+          const qty = parseFloat(item.quantity) || 0;
+          return qty >= minQuantity;
+        });
+        if (!hasMinQuantity) {
+          continue;
+        }
+      }
+
+      let discount = 0;
+      if (promo.promotion_type === 'percentage') {
+        discount = cartSubtotal * (parseFloat(promo.discount_value) / 100);
+      } else if (promo.promotion_type === 'fixed') {
+        discount = parseFloat(promo.discount_value);
+      }
+
+      // Cap discount at subtotal
+      discount = Math.min(discount, cartSubtotal);
+
+      if (discount > bestDiscount) {
+        bestDiscount = discount;
+        bestPromotion = promo;
+      }
+    }
+
+    return res.json({
+      success: true,
+      promotion: bestPromotion,
+      discount: bestDiscount,
+      subtotal: cartSubtotal
+    });
+  } catch (err) {
+    console.error('[calculateCartPromotion]', err.message);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to calculate promotion' 
+    });
+  }
+};
+
+const checkProductPromotions = async (req, res) => {
+  try {
+    const productId = req.params.product_id;
+    const isWholesale = req.query.is_wholesale === 'true';
+    
+    let query = `
+      SELECT p.* FROM promotions p
+      WHERE p.is_active = TRUE
+        AND NOW() BETWEEN p.start_date AND p.end_date
+        AND p.applies_to = 'all'
+    `;
+    
+    if (isWholesale) {
+      query += ` AND p.applies_to_wholesale = TRUE`;
+    } else {
+      query += ` AND p.applies_to_retail = TRUE`;
+    }
+    
+    query += ` ORDER BY p.priority DESC, p.discount_value DESC LIMIT 1`;
+    
+    const result = await pool.query(query);
+    
+    return res.json({
+      success: true,
+      promotion: result.rows[0] || null
+    });
+  } catch (err) {
+    console.error('[checkProductPromotions]', err.message);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to check product promotions' 
+    });
+  }
+};
+
 module.exports = {
   getWholesaleSettings,
   updateWholesaleSettings,
@@ -546,5 +783,8 @@ module.exports = {
   getPromotionById,
   createPromotion,
   updatePromotion,
-  deletePromotion
+  deletePromotion,
+  getActivePromotionsForFrontend,
+  calculateCartPromotion,
+  checkProductPromotions
 };

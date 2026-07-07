@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { promotionService } from '../services/promotionService';
+import { validateProductStock } from '../utils/validators';
+import toast from 'react-hot-toast';
 
 const CartContext = createContext(null);
 
@@ -7,69 +10,120 @@ export const CartProvider = ({ children }) => {
   const [isWholesale, setIsWholesale] = useState(false);
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [appliedDiscount, setAppliedDiscount] = useState(0);
+  const [availablePromotions, setAvailablePromotions] = useState([]);
+  const [customerId, setCustomerId] = useState(null);
+  const [isCalculatingPromotion, setIsCalculatingPromotion] = useState(false);
+  const [cartErrors, setCartErrors] = useState([]);
 
   const addToCart = useCallback((product, wholesale = false) => {
+    const validation = validateProductStock(product, 1);
+    if (!validation.valid) {
+      toast.error(validation.message);
+      return false;
+    }
+
     setCart(prev => {
       const existing = prev.find(i => i.product_id === product.product_id);
       const priceToUse = wholesale && product.wholesale_price ? product.wholesale_price : product.selling_price;
       
       if (existing) {
+        const newQty = existing.quantity + 1;
+        const stockValidation = validateProductStock(product, newQty);
+        if (!stockValidation.valid) {
+          toast.error(stockValidation.message);
+          return prev;
+        }
+        
         return prev.map(i => 
           i.product_id === product.product_id 
-            ? { ...i, quantity: i.quantity + 1, unit_price: priceToUse } 
+            ? { ...i, quantity: newQty, unit_price: priceToUse } 
             : i
         );
       }
+      
       return [...prev, { 
         ...product, 
         quantity: 1, 
         discount_applied: 0,
-        unit_price: priceToUse
+        unit_price: priceToUse,
+        tax_rate: product.tax_rate || 15,
+        tax_exempt: product.tax_exempt || false
       }];
     });
+    
+    return true;
   }, []);
 
-  const removeFromCart = useCallback((id) => setCart(prev => prev.filter(i => i.product_id !== id)), []);
-  const clearCart = useCallback(() => setCart([]), []);
+  const removeFromCart = useCallback((id) => {
+    setCart(prev => prev.filter(i => i.product_id !== id));
+  }, []);
+
+  const clearCart = useCallback(() => {
+    setCart([]);
+    clearPromotion();
+    setCartErrors([]);
+  }, []);
 
   const updateQuantity = useCallback((id, qty) => {
-    if (qty <= 0) { removeFromCart(id); return; }
-    setCart(prev => prev.map(i => i.product_id === id ? { ...i, quantity: qty } : i));
+    if (qty <= 0) { 
+      removeFromCart(id); 
+      return; 
+    }
+    
+    setCart(prev => {
+      const item = prev.find(i => i.product_id === id);
+      if (!item) return prev;
+      
+      const product = {
+        ...item,
+        stock_quantity: item.stock_quantity || 0
+      };
+      const validation = validateProductStock(product, qty);
+      if (!validation.valid) {
+        toast.error(validation.message);
+        return prev;
+      }
+      
+      return prev.map(i => i.product_id === id ? { ...i, quantity: qty } : i);
+    });
   }, [removeFromCart]);
 
   const updateDiscount = useCallback((id, disc) => {
-    setCart(prev => prev.map(i => i.product_id === id ? { ...i, discount_applied: Math.min(100, Math.max(0, disc)) } : i));
+    setCart(prev => prev.map(i => 
+      i.product_id === id 
+        ? { ...i, discount_applied: Math.min(100, Math.max(0, disc)) } 
+        : i
+    ));
   }, []);
 
   const setWholesaleMode = useCallback((value) => {
     setIsWholesale(value);
   }, []);
 
-  // Calculate original subtotal (before any discounts)
-  const originalSubtotal = cart.reduce((s, i) => {
-    const price = i.unit_price || i.selling_price;
-    return s + price * i.quantity * (1 - (i.discount_applied || 0) / 100);
+  const setCartCustomer = useCallback((customer) => {
+    setCustomerId(customer?.customer_id || null);
+  }, []);
+
+  const originalSubtotal = cart.reduce((sum, item) => {
+    const price = item.unit_price || item.selling_price;
+    return sum + (price * item.quantity * (1 - (item.discount_applied || 0) / 100));
   }, 0);
 
-  // Apply promotion discount BEFORE tax
   const discountedSubtotal = Math.max(0, originalSubtotal - appliedDiscount);
 
-  // Calculate tax on discounted amount
-  const taxAmount = cart.reduce((s, i) => {
-    if (i.tax_exempt) return s;
-    const price = i.unit_price || i.selling_price;
-    const itemDiscount = i.discount_applied || 0;
+  const taxAmount = cart.reduce((sum, item) => {
+    if (item.tax_exempt) return sum;
+    const price = item.unit_price || item.selling_price;
+    const itemDiscount = item.discount_applied || 0;
     const discountedPrice = price * (1 - itemDiscount / 100);
-    const base = discountedPrice * i.quantity;
-    // Apply promotion proportionally to each item
+    const base = discountedPrice * item.quantity;
     const itemShare = originalSubtotal > 0 ? (base / originalSubtotal) : 0;
     const itemDiscounted = base - (appliedDiscount * itemShare);
-    return s + itemDiscounted * (i.tax_rate || 15) / 100;
+    return sum + (itemDiscounted * (item.tax_rate || 15) / 100);
   }, 0);
 
-  // Final total = discounted subtotal + tax on discounted amount
   const total = discountedSubtotal + taxAmount;
-  const itemCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const setPromotion = useCallback((promotion, discount) => {
     setAppliedPromotion(promotion);
@@ -81,26 +135,109 @@ export const CartProvider = ({ children }) => {
     setAppliedDiscount(0);
   }, []);
 
+  const calculatePromotions = useCallback(async () => {
+    if (cart.length === 0) {
+      clearPromotion();
+      setAvailablePromotions([]);
+      return;
+    }
+
+    setIsCalculatingPromotion(true);
+    try {
+      const response = await promotionService.getActivePromotions(customerId);
+      const activePromotions = response.data.promotions || [];
+      setAvailablePromotions(activePromotions);
+
+      const cartData = cart.map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price || item.selling_price,
+        discount_applied: item.discount_applied || 0,
+        tax_rate: item.tax_rate || 15,
+        tax_exempt: item.tax_exempt || false
+      }));
+
+      const calculationResponse = await promotionService.calculateCartPromotion({
+        items: cartData,
+        customer_id: customerId,
+        subtotal: originalSubtotal
+      });
+
+      if (calculationResponse.data.promotion) {
+        setAppliedPromotion(calculationResponse.data.promotion);
+        setAppliedDiscount(calculationResponse.data.discount);
+      } else {
+        clearPromotion();
+      }
+    } catch (error) {
+      console.error('[CartContext] Promotion calculation error:', error);
+    } finally {
+      setIsCalculatingPromotion(false);
+    }
+  }, [cart, customerId, originalSubtotal]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      calculatePromotions();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [cart, customerId, calculatePromotions]);
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      clearPromotion();
+      setAvailablePromotions([]);
+    }
+  }, [cart.length]);
+
+  const validateCart = useCallback(() => {
+    const errors = [];
+    for (const item of cart) {
+      const validation = validateProductStock(item, item.quantity);
+      if (!validation.valid) {
+        errors.push({
+          product_id: item.product_id,
+          name: item.name,
+          message: validation.message
+        });
+      }
+    }
+    setCartErrors(errors);
+    return errors;
+  }, [cart]);
+
+  useEffect(() => {
+    validateCart();
+  }, [cart, validateCart]);
+
+  const value = {
+    cart,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    updateDiscount,
+    clearCart,
+    originalSubtotal,
+    subtotal: discountedSubtotal,
+    taxAmount,
+    total,
+    itemCount,
+    isWholesale,
+    setWholesaleMode,
+    appliedPromotion,
+    appliedDiscount,
+    setPromotion,
+    clearPromotion,
+    availablePromotions,
+    isCalculatingPromotion,
+    setCartCustomer,
+    customerId,
+    cartErrors,
+    validateCart
+  };
+
   return (
-    <CartContext.Provider value={{ 
-      cart, 
-      addToCart, 
-      removeFromCart, 
-      updateQuantity, 
-      updateDiscount, 
-      clearCart, 
-      originalSubtotal,
-      subtotal: discountedSubtotal,
-      taxAmount, 
-      total,
-      itemCount,
-      isWholesale,
-      setWholesaleMode,
-      appliedPromotion,
-      appliedDiscount,
-      setPromotion,
-      clearPromotion
-    }}>
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );

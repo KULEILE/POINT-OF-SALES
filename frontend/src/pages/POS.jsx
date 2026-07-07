@@ -13,7 +13,7 @@ import ReturnModal from '../components/returns/ReturnModal';
 import HoldSaleModal from '../components/pos/HoldSaleModal';
 import HeldSalesList from '../components/pos/HeldSalesList';
 import { useCart } from '../context/CartContext';
-import { validateCartStock } from '../utils/validators';
+import { validateCartStock, validateCustomerCredit } from '../utils/validators';
 
 const POS = () => {
   const {
@@ -32,7 +32,13 @@ const POS = () => {
     setWholesaleMode,
     appliedPromotion,
     appliedDiscount,
-    clearPromotion
+    clearPromotion,
+    availablePromotions,
+    isCalculatingPromotion,
+    setCartCustomer,
+    customerId,
+    cartErrors,
+    validateCart
   } = useCart();
 
   const [saleMode, setSaleMode] = useState('cash');
@@ -52,37 +58,49 @@ const POS = () => {
   const handleModeChange = (mode) => {
     setSaleMode(mode);
     setSelectedCustomer(null);
+    setCartCustomer(null);
   };
 
   const handleToggleWholesale = () => {
     setWholesaleMode(!isWholesale);
-    if (!isWholesale) {
-      toast.success('Wholesale mode enabled');
-    } else {
-      toast.success('Retail mode enabled');
-    }
+    toast.success(isWholesale ? 'Retail mode enabled' : 'Wholesale mode enabled');
+  };
+
+  const handleCustomerSelect = (customer) => {
+    setSelectedCustomer(customer);
+    setCartCustomer(customer);
+    setShowCustomerSelect(false);
+  };
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null);
+    setCartCustomer(null);
   };
 
   const handleCheckout = () => {
+    const stockValidation = validateCartStock(cart);
+    if (stockValidation.hasErrors) {
+      toast.error(stockValidation.message);
+      return;
+    }
+
+    const errors = validateCart();
+    if (errors.length > 0) {
+      toast.error('Please fix stock issues before checkout');
+      return;
+    }
+
     if ((saleMode === 'credit' || saleMode === 'layby') && !selectedCustomer) {
       toast.error(`Please select a customer for a ${saleMode === 'credit' ? 'credit' : 'lay-by'} sale.`);
       return;
     }
 
     if (saleMode === 'credit' && selectedCustomer) {
-      const available = parseFloat(selectedCustomer.credit_limit || 0) - parseFloat(selectedCustomer.current_balance || 0);
-      if (total > available) {
-        toast.error(
-          `Sale total (${formatM(total)}) exceeds available credit (${formatM(available)}) for ${selectedCustomer.full_name}.`
-        );
+      const creditValidation = validateCustomerCredit(selectedCustomer, total);
+      if (!creditValidation.valid) {
+        toast.error(creditValidation.message);
         return;
       }
-    }
-
-    const stockValidation = validateCartStock(cart);
-    if (stockValidation.hasErrors) {
-      toast.error(stockValidation.message);
-      return;
     }
 
     setShowPayment(true);
@@ -93,14 +111,17 @@ const POS = () => {
     setCompletedTx(tx);
     setRefreshKey(prev => prev + 1);
     setSelectedCustomer(null);
+    setCartCustomer(null);
     setWholesaleMode(false);
     clearPromotion();
+    toast.success(`Sale complete! Receipt: ${tx.receipt_number}`);
   };
 
   const handleNewSale = () => {
     clearCart();
     setCompletedTx(null);
     setSelectedCustomer(null);
+    setCartCustomer(null);
     setSaleMode('cash');
     setWholesaleMode(false);
     clearPromotion();
@@ -185,9 +206,6 @@ const POS = () => {
 
   const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
 
-  const isWholesaleMode = isWholesale;
-  const hasPromotion = appliedPromotion && appliedDiscount > 0;
-
   return (
     <div className="flex h-full overflow-hidden">
 
@@ -198,12 +216,17 @@ const POS = () => {
             <button
               onClick={handleToggleWholesale}
               className={`px-3 py-1.5 rounded-lg text-xs font-600 transition-all border
-                ${isWholesaleMode 
+                ${isWholesale 
                   ? 'bg-primary text-white border-primary' 
                   : 'bg-surface-card border-surface-border text-text-muted hover:border-primary/50'}`}
             >
-              {isWholesaleMode ? 'Wholesale' : 'Retail'}
+              {isWholesale ? 'Wholesale' : 'Retail'}
             </button>
+            {cartErrors.length > 0 && (
+              <span className="text-xs text-danger font-600 bg-danger/10 px-2 py-1 rounded-lg">
+                {cartErrors.length} issue{cartErrors.length > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleOpenHeldSales} className="k-btn-outline text-sm px-4 py-2">
@@ -218,7 +241,7 @@ const POS = () => {
           </div>
         </div>
 
-        {isWholesaleMode && (
+        {isWholesale && (
           <div className="bg-primary/10 border border-primary/30 rounded-lg px-4 py-2 flex items-center justify-between">
             <p className="text-xs text-primary font-600">Wholesale Mode Active</p>
             <p className="text-xs text-text-muted">
@@ -233,8 +256,8 @@ const POS = () => {
           <CustomerPanel
             saleMode={saleMode}
             selectedCustomer={selectedCustomer}
-            onSelectCustomer={setSelectedCustomer}
-            onClearCustomer={() => setSelectedCustomer(null)}
+            onSelectCustomer={handleCustomerSelect}
+            onClearCustomer={handleClearCustomer}
           />
         )}
 
@@ -242,7 +265,7 @@ const POS = () => {
           <ProductGrid
             onAddToCart={addToCart}
             refreshTrigger={refreshKey}
-            isWholesale={isWholesaleMode}
+            isWholesale={isWholesale}
           />
         </div>
       </div>
@@ -256,7 +279,7 @@ const POS = () => {
           itemCount={itemCount}
           saleMode={saleMode}
           selectedCustomer={selectedCustomer}
-          isWholesale={isWholesaleMode}
+          isWholesale={isWholesale}
           onUpdateQty={updateQuantity}
           onRemove={removeFromCart}
           onUpdateDiscount={updateDiscount}
@@ -266,6 +289,9 @@ const POS = () => {
           promotion={appliedPromotion}
           discountAmount={appliedDiscount}
           originalSubtotal={originalSubtotal}
+          availablePromotions={availablePromotions}
+          isCalculatingPromotion={isCalculatingPromotion}
+          cartErrors={cartErrors}
         />
       </div>
 
@@ -275,11 +301,12 @@ const POS = () => {
           cart={cart}
           saleMode={saleMode}
           selectedCustomer={selectedCustomer}
-          isWholesale={isWholesaleMode}
+          isWholesale={isWholesale}
           onSuccess={handleSuccess}
           onClose={() => setShowPayment(false)}
           promotion={appliedPromotion}
           discountAmount={appliedDiscount}
+          originalSubtotal={originalSubtotal}
         />
       )}
 
@@ -289,11 +316,12 @@ const POS = () => {
           cart={cart}
           total={total}
           taxAmount={taxAmount}
-          isWholesale={isWholesaleMode}
+          isWholesale={isWholesale}
           onClose={() => setCompletedTx(null)}
           onNewSale={handleNewSale}
           promotion={appliedPromotion}
           discountAmount={appliedDiscount}
+          originalSubtotal={originalSubtotal}
         />
       )}
 

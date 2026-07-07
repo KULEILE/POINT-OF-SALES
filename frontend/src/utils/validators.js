@@ -1,10 +1,32 @@
+// ============================================================
+// BASIC VALIDATORS
+// ============================================================
+
 export const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
 export const isPhone = (v) => /^(\+266)?[0-9]{8}$/.test(v.replace(/\s/g,''));
+
 export const isRequired = (v) => v !== null && v !== undefined && String(v).trim() !== '';
+
 export const minLength = (v, n) => String(v).length >= n;
+
 export const isPositive = (v) => parseFloat(v) > 0;
+
 export const isNumber = (v) => !isNaN(parseFloat(v)) && isFinite(v);
+
 export const isInteger = (v) => Number.isInteger(parseFloat(v)) && parseFloat(v) >= 0;
+
+// ============================================================
+// FORMAT CURRENCY
+// ============================================================
+
+export const formatCurrency = (amount) => {
+  return `M ${parseFloat(amount || 0).toFixed(2)}`;
+};
+
+// ============================================================
+// PRODUCT VALIDATION
+// ============================================================
 
 export const validateProduct = (data) => {
   const errors = {};
@@ -21,6 +43,10 @@ export const validateProduct = (data) => {
   return errors;
 };
 
+// ============================================================
+// USER VALIDATION
+// ============================================================
+
 export const validateUser = (data) => {
   const errors = {};
   if (!isRequired(data.full_name)) errors.full_name = 'Full name is required.';
@@ -35,6 +61,10 @@ export const validateUser = (data) => {
   return errors;
 };
 
+// ============================================================
+// CUSTOMER VALIDATION
+// ============================================================
+
 export const validateCustomer = (data) => {
   const errors = {};
   if (!isRequired(data.full_name)) errors.full_name = 'Full name is required.';
@@ -42,6 +72,10 @@ export const validateCustomer = (data) => {
   if (data.phone && !isPhone(data.phone)) errors.phone = 'Invalid phone number format.';
   return errors;
 };
+
+// ============================================================
+// CART STOCK VALIDATION
+// ============================================================
 
 export const validateCartStock = (cart) => {
   const errors = [];
@@ -82,6 +116,10 @@ export const validateCartStock = (cart) => {
   };
 };
 
+// ============================================================
+// PRODUCT STOCK VALIDATION (Single Product)
+// ============================================================
+
 export const validateProductStock = (product, quantity = 1) => {
   const requestedQty = parseFloat(quantity) || 0;
   const availableQty = parseFloat(product.stock_quantity || product.quantity || product.stock || 0);
@@ -105,6 +143,10 @@ export const validateProductStock = (product, quantity = 1) => {
     message: null
   };
 };
+
+// ============================================================
+// SALE VALIDATION
+// ============================================================
 
 export const validateSale = (data) => {
   const errors = {};
@@ -133,4 +175,125 @@ export const validateSale = (data) => {
   }
 
   return errors;
+};
+
+// ============================================================
+// CUSTOMER CREDIT VALIDATION
+// ============================================================
+
+export const validateCustomerCredit = (customer, total) => {
+  if (!customer) return { valid: true };
+  
+  const available = parseFloat(customer.credit_limit || 0) - parseFloat(customer.current_balance || 0);
+  
+  if (total > available) {
+    return {
+      valid: false,
+      message: `Sale total (${formatCurrency(total)}) exceeds available credit (${formatCurrency(available)})`
+    };
+  }
+  
+  return { valid: true };
+};
+
+// ============================================================
+// PAYMENT VALIDATION
+// ============================================================
+
+export const validatePayment = (data) => {
+  const errors = {};
+  
+  if (!isRequired(data.payment_method)) {
+    errors.payment_method = 'Payment method is required.';
+  }
+  
+  if (data.payment_method === 'cash') {
+    const amount = parseFloat(data.amount) || 0;
+    const total = parseFloat(data.total) || 0;
+    
+    if (!isPositive(amount)) {
+      errors.amount = 'Amount must be greater than 0.';
+    } else if (amount < total) {
+      errors.amount = `Amount (${formatCurrency(amount)}) is less than total (${formatCurrency(total)}).`;
+    }
+  }
+  
+  return errors;
+};
+
+// ============================================================
+// RETURN VALIDATION
+// ============================================================
+
+export const validateReturn = (data) => {
+  const errors = {};
+  
+  if (!data.transaction_id) {
+    errors.transaction_id = 'Transaction is required.';
+  }
+  
+  if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+    errors.items = 'At least one item must be selected for return.';
+  }
+  
+  if (!isRequired(data.refund_method)) {
+    errors.refund_method = 'Refund method is required.';
+  }
+  
+  return errors;
+};
+
+// ============================================================
+// PROMOTION VALIDATION
+// ============================================================
+
+export const validatePromotion = (data) => {
+  const errors = {};
+  
+  if (!isRequired(data.name)) {
+    errors.name = 'Promotion name is required.';
+  }
+  
+  if (!isPositive(data.discount_value)) {
+    errors.discount_value = 'Discount value must be greater than 0.';
+  }
+  
+  if (!isRequired(data.start_date)) {
+    errors.start_date = 'Start date is required.';
+  }
+  
+  if (!isRequired(data.end_date)) {
+    errors.end_date = 'End date is required.';
+  }
+  
+  if (data.start_date && data.end_date && new Date(data.start_date) > new Date(data.end_date)) {
+    errors.end_date = 'End date must be after start date.';
+  }
+  
+  return errors;
+};
+
+// ============================================================
+// EXPORT ALL
+// ============================================================
+
+export default {
+  isEmail,
+  isPhone,
+  isRequired,
+  minLength,
+  isPositive,
+  isNumber,
+  isInteger,
+  formatCurrency,
+  validateProduct,
+  validateUser,
+  validateCustomer,
+  validateCartStock,
+  validateProductStock,
+  validateSale,
+  validateCustomerCredit,
+  validatePayment,
+  validateReturn,
+  validatePromotion
 };
