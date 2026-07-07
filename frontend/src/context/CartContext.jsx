@@ -130,9 +130,15 @@ export const CartProvider = ({ children }) => {
     setAppliedDiscount(0);
   }, []);
 
-  // Fetch available promotions (NOT auto-apply)
+  // CRITICAL: Fetch available promotions
   const fetchAvailablePromotions = useCallback(async () => {
+    console.log('[CartContext] ===== FETCHING PROMOTIONS =====');
+    console.log('[CartContext] Cart length:', cart.length);
+    console.log('[CartContext] Customer ID:', customerId);
+    console.log('[CartContext] Is Wholesale:', isWholesale);
+    
     if (cart.length === 0) {
+      console.log('[CartContext] Cart empty, clearing promotions');
       setAvailablePromotions([]);
       return;
     }
@@ -140,32 +146,77 @@ export const CartProvider = ({ children }) => {
     setIsCalculatingPromotion(true);
     
     try {
+      // Call the API
+      console.log('[CartContext] Calling promotionService.getActivePromotions()...');
       const response = await promotionService.getActivePromotions(customerId, isWholesale);
-      const activePromotions = response.promotions || [];
+      console.log('[CartContext] API Response:', response);
       
-      // Filter promotions based on min_purchase
-      const eligiblePromotions = activePromotions.filter(promo => {
-        const minPurchase = parseFloat(promo.min_purchase) || 0;
-        return minPurchase === 0 || originalSubtotal >= minPurchase;
+      const activePromotions = response.promotions || [];
+      console.log('[CartContext] Found', activePromotions.length, 'promotions');
+      
+      // Log each promotion details
+      activePromotions.forEach((promo, index) => {
+        console.log(`[CartContext] Promotion ${index + 1}:`, {
+          id: promo.promotion_id,
+          name: promo.name,
+          type: promo.promotion_type,
+          value: promo.discount_value,
+          min_purchase: promo.min_purchase,
+          min_quantity: promo.min_quantity,
+          is_active: promo.is_active
+        });
       });
       
-      setAvailablePromotions(eligiblePromotions);
+      setAvailablePromotions(activePromotions);
+      
+      // If there's only one promotion, auto-apply it (or let user choose)
+      if (activePromotions.length === 1) {
+        const promo = activePromotions[0];
+        const minPurchase = parseFloat(promo.min_purchase) || 0;
+        const isEligible = minPurchase === 0 || originalSubtotal >= minPurchase;
+        
+        console.log('[CartContext] Single promotion found:', promo.name);
+        console.log('[CartContext] Min purchase:', minPurchase);
+        console.log('[CartContext] Subtotal:', originalSubtotal);
+        console.log('[CartContext] Is eligible:', isEligible);
+        
+        // Optionally auto-apply if eligible (you can remove this if you want manual only)
+        if (isEligible && !appliedPromotion) {
+          let discount = 0;
+          if (promo.promotion_type === 'percentage') {
+            discount = originalSubtotal * (parseFloat(promo.discount_value) / 100);
+          } else if (promo.promotion_type === 'fixed') {
+            discount = parseFloat(promo.discount_value);
+          }
+          discount = Math.min(discount, originalSubtotal);
+          
+          if (discount > 0) {
+            console.log('[CartContext] Auto-applying promotion:', promo.name, 'Discount:', discount);
+            setAppliedPromotion(promo);
+            setAppliedDiscount(discount);
+          }
+        }
+      }
     } catch (error) {
-      console.error('[CartContext] Fetch promotions error:', error);
+      console.error('[CartContext] Error fetching promotions:', error);
+      console.error('[CartContext] Error details:', error.response?.data || error.message);
       setAvailablePromotions([]);
     } finally {
       setIsCalculatingPromotion(false);
+      console.log('[CartContext] ===== FETCHING PROMOTIONS COMPLETE =====');
     }
-  }, [cart, customerId, isWholesale, originalSubtotal]);
+  }, [cart, customerId, isWholesale, originalSubtotal, appliedPromotion]);
 
-  // Fetch promotions when cart changes
+  // Trigger promotion fetch when cart changes
   useEffect(() => {
+    console.log('[CartContext] Cart changed, scheduling promotion fetch...');
     const timer = setTimeout(() => {
       fetchAvailablePromotions();
-    }, 300);
+    }, 500);
     return () => clearTimeout(timer);
   }, [cart, customerId, isWholesale, fetchAvailablePromotions]);
 
+  // Clear promotion when cart becomes empty
   useEffect(() => {
     if (cart.length === 0) {
       clearPromotion();

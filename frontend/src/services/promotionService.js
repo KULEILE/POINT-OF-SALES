@@ -7,20 +7,33 @@ export const promotionService = {
       if (customerId) params.customer_id = customerId;
       if (isWholesale) params.is_wholesale = true;
       
+      console.log('[promotionService] getActivePromotions called with params:', params);
+      
       const response = await api.get('/settings/promotions/active', { params });
+      
+      console.log('[promotionService] getActivePromotions response status:', response.status);
+      console.log('[promotionService] getActivePromotions response data:', response.data);
+      
       return response.data;
     } catch (error) {
-      console.error('[promotionService] getActivePromotions error:', error.response?.data || error.message);
+      console.error('[promotionService] getActivePromotions ERROR:', error);
+      console.error('[promotionService] Error response:', error.response?.data);
+      console.error('[promotionService] Error status:', error.response?.status);
+      console.error('[promotionService] Error headers:', error.response?.headers);
       return { success: true, promotions: [] };
     }
   },
 
   calculateCartPromotion: async (cartData) => {
     try {
+      console.log('[promotionService] calculateCartPromotion called with:', cartData);
       const response = await api.post('/settings/promotions/calculate', cartData);
+      console.log('[promotionService] calculateCartPromotion response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('[promotionService] calculateCartPromotion error:', error.response?.data || error.message);
+      console.error('[promotionService] calculateCartPromotion ERROR:', error);
+      console.error('[promotionService] Error response:', error.response?.data);
+      console.error('[promotionService] Error status:', error.response?.status);
       return { success: true, promotion: null, discount: 0 };
     }
   },

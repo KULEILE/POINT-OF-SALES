@@ -32,34 +32,23 @@ const PromotionSettings = () => {
     loadPromotions();
   }, []);
 
+  // SIMPLIFIED: Load promotions without extra API calls
   const loadPromotions = async () => {
     setLoading(true);
     try {
       const response = await settingService.getPromotions();
-      const promotionsData = response.data.promotions || [];
+      console.log('[PromotionSettings] Raw promotions response:', response);
       
-      // For each promotion, fetch its customer IDs
-      const promotionsWithCustomers = await Promise.all(
-        promotionsData.map(async (promo) => {
-          try {
-            const detailResponse = await settingService.getPromotionById(promo.promotion_id);
-            return {
-              ...promo,
-              customer_ids: detailResponse.data.customers || []
-            };
-          } catch (err) {
-            return {
-              ...promo,
-              customer_ids: []
-            };
-          }
-        })
-      );
+      const promotionsData = response.data?.promotions || [];
+      console.log('[PromotionSettings] Promotions found:', promotionsData.length);
       
-      setPromotions(promotionsWithCustomers);
+      // Simply set promotions without fetching customer IDs separately
+      // The customer_count is already included in the query
+      setPromotions(promotionsData);
     } catch (err) {
-      toast.error('Failed to load promotions.');
       console.error('[PromotionSettings] loadPromotions error:', err);
+      toast.error('Failed to load promotions.');
+      setPromotions([]);
     } finally {
       setLoading(false);
     }
@@ -127,12 +116,11 @@ const PromotionSettings = () => {
     };
 
     try {
-      let response;
       if (editingPromotion) {
-        response = await settingService.updatePromotion(editingPromotion.promotion_id, payload);
+        await settingService.updatePromotion(editingPromotion.promotion_id, payload);
         toast.success('Promotion updated successfully.');
       } else {
-        response = await settingService.createPromotion(payload);
+        await settingService.createPromotion(payload);
         toast.success('Promotion created successfully.');
       }
       setShowForm(false);
@@ -140,7 +128,8 @@ const PromotionSettings = () => {
       resetForm();
       loadPromotions();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to save promotion.');
+      const errorMsg = err.response?.data?.message || 'Failed to save promotion.';
+      toast.error(errorMsg);
       console.error('[PromotionSettings] handleSave error:', err);
     }
   };
@@ -168,17 +157,6 @@ const PromotionSettings = () => {
   const handleEdit = async (promotion) => {
     setEditingPromotion(promotion);
     
-    // Fetch customer IDs for this promotion
-    let customerIds = promotion.customer_ids || [];
-    if (!customerIds.length) {
-      try {
-        const detailResponse = await settingService.getPromotionById(promotion.promotion_id);
-        customerIds = detailResponse.data.customers || [];
-      } catch (err) {
-        console.error('Failed to fetch promotion customers:', err);
-      }
-    }
-    
     setForm({
       name: promotion.name,
       description: promotion.description || '',
@@ -188,7 +166,7 @@ const PromotionSettings = () => {
       min_purchase: promotion.min_purchase || '',
       start_date: promotion.start_date ? promotion.start_date.split('T')[0] : '',
       end_date: promotion.end_date ? promotion.end_date.split('T')[0] : '',
-      customer_ids: customerIds,
+      customer_ids: promotion.customer_ids || [],
       min_quantity: promotion.min_quantity || 1,
       priority: promotion.priority || 0,
       applies_to_wholesale: promotion.applies_to_wholesale !== undefined ? promotion.applies_to_wholesale : true,
@@ -205,6 +183,7 @@ const PromotionSettings = () => {
       loadPromotions();
     } catch (err) {
       toast.error('Failed to delete promotion.');
+      console.error('[PromotionSettings] handleDelete error:', err);
     }
   };
 
@@ -218,6 +197,7 @@ const PromotionSettings = () => {
       loadPromotions();
     } catch (err) {
       toast.error('Failed to update promotion status.');
+      console.error('[PromotionSettings] handleToggleStatus error:', err);
     }
   };
 
@@ -266,7 +246,6 @@ const PromotionSettings = () => {
                   <th className="text-left py-3 px-4 text-xs font-600 text-text-muted uppercase tracking-wider">Value</th>
                   <th className="text-left py-3 px-4 text-xs font-600 text-text-muted uppercase tracking-wider">Min Purchase</th>
                   <th className="text-left py-3 px-4 text-xs font-600 text-text-muted uppercase tracking-wider">Period</th>
-                  <th className="text-left py-3 px-4 text-xs font-600 text-text-muted uppercase tracking-wider">Customers</th>
                   <th className="text-left py-3 px-4 text-xs font-600 text-text-muted uppercase tracking-wider">Status</th>
                   <th className="text-left py-3 px-4 text-xs font-600 text-text-muted uppercase tracking-wider">Actions</th>
                 </tr>
@@ -289,13 +268,6 @@ const PromotionSettings = () => {
                       <div>{formatDateTime(p.start_date)}</div>
                       <div className="text-text-faint text-[10px]">to</div>
                       <div>{formatDateTime(p.end_date)}</div>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {p.applies_to === 'all' ? (
-                        <span className="text-xs text-success">All Customers</span>
-                      ) : (
-                        <span className="text-xs text-primary">{p.customer_count || 0} customers</span>
-                      )}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${p.is_active ? 'bg-success/10 text-success' : 'bg-text-faint/10 text-text-faint'}`}>
@@ -451,22 +423,6 @@ const PromotionSettings = () => {
                 <p className="text-xs text-text-faint mt-1">Cart subtotal must reach this amount for promotion to apply</p>
               </div>
 
-              {/* Minimum Quantity */}
-              <div>
-                <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Minimum Quantity
-                </label>
-                <input
-                  type="number"
-                  className="k-input"
-                  placeholder="1"
-                  value={form.min_quantity}
-                  onChange={(e) => setForm({ ...form, min_quantity: parseInt(e.target.value) || 1 })}
-                  min="1"
-                />
-                <p className="text-xs text-text-faint mt-1">Minimum quantity of any single item required</p>
-              </div>
-
               {/* Applies To */}
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
@@ -537,7 +493,6 @@ const PromotionSettings = () => {
                       })}
                     </div>
                   )}
-                  <p className="text-xs text-text-faint mt-1">Selected customers will be eligible for this promotion</p>
                 </div>
               )}
 
@@ -565,22 +520,6 @@ const PromotionSettings = () => {
                     Applies to Wholesale
                   </label>
                 </div>
-              </div>
-
-              {/* Priority */}
-              <div>
-                <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Priority
-                </label>
-                <input
-                  type="number"
-                  className="k-input"
-                  placeholder="0"
-                  value={form.priority}
-                  onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) || 0 })}
-                  min="0"
-                />
-                <p className="text-xs text-text-faint mt-1">Higher priority promotions are applied first</p>
               </div>
 
               {/* Action Buttons */}
