@@ -556,7 +556,7 @@ const deletePromotion = async (req, res) => {
 };
 
 // ============================================================
-// PROMOTIONS - FRONTEND ENDPOINTS
+// PROMOTIONS - FRONTEND ENDPOINTS (FIXED)
 // ============================================================
 
 const getActivePromotionsForFrontend = async (req, res) => {
@@ -566,33 +566,38 @@ const getActivePromotionsForFrontend = async (req, res) => {
     
     console.log('[getActivePromotionsForFrontend] Request params:', { customerId, isWholesale });
     
+    // Simplified query - get all active promotions
     let query = `
-      SELECT p.*, 
-             COUNT(DISTINCT pc.customer_id) as customer_count,
-             (SELECT COUNT(*) FROM promotion_usage pu 
-              WHERE pu.promotion_id = p.promotion_id) as usage_count
+      SELECT p.* 
       FROM promotions p
-      LEFT JOIN promotion_customers pc ON p.promotion_id = pc.promotion_id
       WHERE p.is_active = TRUE
         AND NOW() BETWEEN p.start_date AND p.end_date
     `;
     
     const params = [];
+    let paramCount = 0;
     
+    // Filter by wholesale/retail
     if (isWholesale) {
-      query += ` AND p.applies_to_wholesale = TRUE`;
+      paramCount++;
+      query += ` AND p.applies_to_wholesale = $${paramCount}`;
+      params.push(true);
     } else {
-      query += ` AND p.applies_to_retail = TRUE`;
+      paramCount++;
+      query += ` AND p.applies_to_retail = $${paramCount}`;
+      params.push(true);
     }
     
+    // Filter by customer eligibility
     if (customerId) {
+      paramCount++;
       query += `
         AND (
           p.applies_to = 'all'
           OR EXISTS (
-            SELECT 1 FROM promotion_customers pc2 
-            WHERE pc2.promotion_id = p.promotion_id 
-            AND pc2.customer_id = $1
+            SELECT 1 FROM promotion_customers pc 
+            WHERE pc.promotion_id = p.promotion_id 
+            AND pc.customer_id = $${paramCount}
           )
         )
       `;
@@ -601,7 +606,7 @@ const getActivePromotionsForFrontend = async (req, res) => {
       query += ` AND p.applies_to = 'all'`;
     }
     
-    query += ` GROUP BY p.promotion_id ORDER BY p.priority DESC, p.discount_value DESC`;
+    query += ` ORDER BY p.priority DESC, p.discount_value DESC`;
     
     console.log('[getActivePromotionsForFrontend] Query:', query);
     console.log('[getActivePromotionsForFrontend] Params:', params);
@@ -609,6 +614,16 @@ const getActivePromotionsForFrontend = async (req, res) => {
     const result = await pool.query(query, params);
     
     console.log('[getActivePromotionsForFrontend] Found:', result.rows.length, 'promotions');
+    
+    // Log each promotion found
+    result.rows.forEach(promo => {
+      console.log('[getActivePromotionsForFrontend] Promotion:', {
+        id: promo.promotion_id,
+        name: promo.name,
+        min_purchase: promo.min_purchase,
+        is_active: promo.is_active
+      });
+    });
     
     return res.json({ 
       success: true, 
@@ -639,28 +654,38 @@ const calculateCartPromotion = async (req, res) => {
   }
 
   try {
+    // Get active promotions
     let query = `
-      SELECT * FROM promotions p
+      SELECT p.* 
+      FROM promotions p
       WHERE p.is_active = TRUE
         AND NOW() BETWEEN p.start_date AND p.end_date
     `;
     
     const params = [];
+    let paramCount = 0;
     
+    // Filter by wholesale/retail
     if (is_wholesale) {
-      query += ` AND p.applies_to_wholesale = TRUE`;
+      paramCount++;
+      query += ` AND p.applies_to_wholesale = $${paramCount}`;
+      params.push(true);
     } else {
-      query += ` AND p.applies_to_retail = TRUE`;
+      paramCount++;
+      query += ` AND p.applies_to_retail = $${paramCount}`;
+      params.push(true);
     }
     
+    // Filter by customer eligibility
     if (customer_id) {
+      paramCount++;
       query += `
         AND (
           p.applies_to = 'all'
           OR EXISTS (
             SELECT 1 FROM promotion_customers pc 
             WHERE pc.promotion_id = p.promotion_id 
-            AND pc.customer_id = $1
+            AND pc.customer_id = $${paramCount}
           )
         )
       `;
@@ -687,6 +712,7 @@ const calculateCartPromotion = async (req, res) => {
       });
     }
 
+    // Calculate cart subtotal
     let cartSubtotal = subtotal || 0;
     
     if (!subtotal) {
@@ -708,17 +734,20 @@ const calculateCartPromotion = async (req, res) => {
       const minQuantity = parseInt(promo.min_quantity) || 1;
       
       console.log('[calculateCartPromotion] Checking promotion:', {
+        id: promo.promotion_id,
         name: promo.name,
         minPurchase,
         minQuantity,
         cartSubtotal
       });
       
+      // Check minimum purchase amount
       if (minPurchase > 0 && cartSubtotal < minPurchase) {
         console.log('[calculateCartPromotion] Skipping - min purchase not met:', cartSubtotal, '<', minPurchase);
         continue;
       }
       
+      // Check minimum quantity
       if (minQuantity > 1) {
         const hasMinQuantity = items.some(item => {
           const qty = parseFloat(item.quantity) || 0;

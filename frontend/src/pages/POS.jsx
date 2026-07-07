@@ -38,7 +38,9 @@ const POS = () => {
     setCartCustomer,
     customerId,
     cartErrors,
-    validateCart
+    validateCart,
+    setPromotion,
+    fetchAvailablePromotions
   } = useCart();
 
   const [saleMode, setSaleMode] = useState('cash');
@@ -75,6 +77,24 @@ const POS = () => {
   const handleClearCustomer = () => {
     setSelectedCustomer(null);
     setCartCustomer(null);
+  };
+
+  // Handle manual promotion application
+  const handleApplyPromotion = (promotion, discount) => {
+    setPromotion(promotion, discount);
+    // Refresh available promotions after applying
+    setTimeout(() => {
+      fetchAvailablePromotions();
+    }, 100);
+  };
+
+  // Handle manual promotion removal
+  const handleRemovePromotion = () => {
+    clearPromotion();
+    // Refresh available promotions after removing
+    setTimeout(() => {
+      fetchAvailablePromotions();
+    }, 100);
   };
 
   const handleCheckout = () => {
@@ -290,6 +310,8 @@ const POS = () => {
           availablePromotions={availablePromotions}
           isCalculatingPromotion={isCalculatingPromotion}
           cartErrors={cartErrors}
+          onApplyPromotion={handleApplyPromotion}
+          onRemovePromotion={handleRemovePromotion}
         />
       </div>
 

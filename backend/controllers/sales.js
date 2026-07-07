@@ -52,7 +52,6 @@ const getActivePromotions = async (customer_id = null, is_wholesale = false) => 
   `;
   const params = [];
 
-  // Filter by wholesale/retail
   if (is_wholesale) {
     query += ` AND p.applies_to_wholesale = TRUE`;
   } else {
@@ -81,49 +80,50 @@ const getActivePromotions = async (customer_id = null, is_wholesale = false) => 
   return result.rows;
 };
 
-const applyBestPromotion = (processedItems, promotions) => {
-  let bestPromotion = null;
-  let bestDiscount = 0;
-
-  const subtotal = processedItems.reduce((sum, item) => sum + (item.line_subtotal || 0), 0);
-
-  for (const promo of promotions) {
-    const minPurchase = parseFloat(promo.min_purchase) || 0;
-    const minQuantity = parseInt(promo.min_quantity) || 1;
-    
-    // Check minimum purchase amount
-    if (minPurchase > 0 && subtotal < minPurchase) {
-      continue;
-    }
-    
-    // Check minimum quantity
-    if (minQuantity > 1) {
-      const hasMinQuantity = processedItems.some(item => {
-        const qty = parseFloat(item.quantity) || 0;
-        return qty >= minQuantity;
-      });
-      if (!hasMinQuantity) {
-        continue;
-      }
-    }
-
-    let discount = 0;
-    if (promo.promotion_type === 'percentage') {
-      discount = subtotal * (parseFloat(promo.discount_value) / 100);
-    } else if (promo.promotion_type === 'fixed') {
-      discount = parseFloat(promo.discount_value);
-    }
-
-    // Cap discount at subtotal
-    discount = Math.min(discount, subtotal);
-
-    if (discount > bestDiscount) {
-      bestDiscount = discount;
-      bestPromotion = promo;
+// Validate a specific promotion for a cart
+const validatePromotionForCart = (promotion, subtotal, items) => {
+  if (!promotion) return { valid: true };
+  
+  const minPurchase = parseFloat(promotion.min_purchase) || 0;
+  const minQuantity = parseInt(promotion.min_quantity) || 1;
+  
+  // Check minimum purchase amount
+  if (minPurchase > 0 && subtotal < minPurchase) {
+    return {
+      valid: false,
+      message: `Subtotal (${formatCurrency(subtotal)}) is less than minimum purchase (${formatCurrency(minPurchase)})`
+    };
+  }
+  
+  // Check minimum quantity
+  if (minQuantity > 1) {
+    const hasMinQuantity = items.some(item => {
+      const qty = parseFloat(item.quantity) || 0;
+      return qty >= minQuantity;
+    });
+    if (!hasMinQuantity) {
+      return {
+        valid: false,
+        message: `No item meets the minimum quantity of ${minQuantity}`
+      };
     }
   }
+  
+  return { valid: true };
+};
 
-  return { promotion: bestPromotion, discount: bestDiscount, subtotal };
+// Calculate discount for a specific promotion
+const calculatePromotionDiscount = (promotion, subtotal) => {
+  if (!promotion) return 0;
+  
+  let discount = 0;
+  if (promotion.promotion_type === 'percentage') {
+    discount = subtotal * (parseFloat(promotion.discount_value) / 100);
+  } else if (promotion.promotion_type === 'fixed') {
+    discount = parseFloat(promotion.discount_value);
+  }
+  
+  return Math.min(discount, subtotal);
 };
 
 // ============================================================
@@ -143,7 +143,8 @@ const create = async (req, res) => {
     customer_type,
     is_wholesale,
     wholesale_discount,
-    payment_splits
+    payment_splits,
+    promotion_id  // NEW: manually selected promotion ID
   } = req.body;
 
   if (!items || !items.length) {
@@ -263,19 +264,82 @@ const create = async (req, res) => {
     }
 
     // ============================================================
-    // APPLY PROMOTIONS - BEFORE TAX
+    // APPLY MANUALLY SELECTED PROMOTION
     // ============================================================
 
     let appliedPromotion = null;
     let appliedDiscount = 0;
 
-    const promotions = await getActivePromotions(customer_id || null, isWholesale);
-    if (promotions.length > 0) {
-      const result = applyBestPromotion(processedItems, promotions);
-      appliedPromotion = result.promotion;
-      appliedDiscount = result.discount;
+    // If a promotion_id was provided, validate and apply it
+    if (promotion_id) {
+      // Fetch the promotion details
+      const promoResult = await client.query(
+        `SELECT * FROM promotions WHERE promotion_id = $1 AND is_active = TRUE`,
+        [promotion_id]
+      );
+      
+      const promotion = promoResult.rows[0];
+      
+      if (promotion) {
+        // Validate the promotion against the cart
+        const validation = validatePromotionForCart(promotion, subtotal, processedItems);
+        
+        if (validation.valid) {
+          // Check customer eligibility
+          if (promotion.applies_to === 'specific' && customer_id) {
+            const customerCheck = await client.query(
+              `SELECT 1 FROM promotion_customers 
+               WHERE promotion_id = $1 AND customer_id = $2`,
+              [promotion_id, customer_id]
+            );
+            if (customerCheck.rows.length === 0) {
+              return res.status(400).json({
+                success: false,
+                message: 'This promotion is not valid for the selected customer.'
+              });
+            }
+          } else if (promotion.applies_to === 'specific' && !customer_id) {
+            return res.status(400).json({
+              success: false,
+              message: 'This promotion requires a customer to be selected.'
+            });
+          }
+          
+          // Calculate the discount
+          appliedDiscount = calculatePromotionDiscount(promotion, subtotal);
+          appliedPromotion = promotion;
+        } else {
+          return res.status(400).json({
+            success: false,
+            message: `Promotion validation failed: ${validation.message}`
+          });
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Selected promotion not found or inactive.'
+        });
+      }
+    } else {
+      // If no promotion selected, check if any auto-applicable promotions exist
+      // (Optional: You can keep this for backward compatibility)
+      const promotions = await getActivePromotions(customer_id || null, isWholesale);
+      if (promotions.length > 0) {
+        // Find the best promotion that auto-applies (without manual selection)
+        for (const promo of promotions) {
+          const validation = validatePromotionForCart(promo, subtotal, processedItems);
+          if (validation.valid) {
+            const discount = calculatePromotionDiscount(promo, subtotal);
+            if (discount > appliedDiscount) {
+              appliedDiscount = discount;
+              appliedPromotion = promo;
+            }
+          }
+        }
+      }
     }
 
+    // Pre-tax subtotal after the promotion discount
     const discountedSubtotal = Math.max(0, subtotal - appliedDiscount);
 
     // ============================================================

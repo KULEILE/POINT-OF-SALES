@@ -98,6 +98,7 @@ export const CartProvider = ({ children }) => {
     setCustomerId(customer?.customer_id || null);
   }, []);
 
+  // Calculate totals
   const originalSubtotal = cart.reduce((sum, item) => {
     const price = item.unit_price || item.selling_price;
     return sum + (price * item.quantity * (1 - (item.discount_applied || 0) / 100));
@@ -129,11 +130,10 @@ export const CartProvider = ({ children }) => {
     setAppliedDiscount(0);
   }, []);
 
-  const calculatePromotions = useCallback(async () => {
+  // Fetch available promotions (NOT auto-apply)
+  const fetchAvailablePromotions = useCallback(async () => {
     if (cart.length === 0) {
-      clearPromotion();
       setAvailablePromotions([]);
-      setIsCalculatingPromotion(false);
       return;
     }
 
@@ -142,50 +142,29 @@ export const CartProvider = ({ children }) => {
     try {
       const response = await promotionService.getActivePromotions(customerId, isWholesale);
       const activePromotions = response.promotions || [];
-      setAvailablePromotions(activePromotions);
-
-      if (activePromotions.length === 0) {
-        clearPromotion();
-        setIsCalculatingPromotion(false);
-        return;
-      }
-
-      const cartData = {
-        items: cart.map(item => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price || item.selling_price,
-          discount_applied: item.discount_applied || 0,
-          tax_rate: item.tax_rate || 15,
-          tax_exempt: item.tax_exempt || false
-        })),
-        customer_id: customerId,
-        subtotal: originalSubtotal,
-        is_wholesale: isWholesale
-      };
-
-      const calculationResult = await promotionService.calculateCartPromotion(cartData);
       
-      if (calculationResult.promotion && calculationResult.discount > 0) {
-        setAppliedPromotion(calculationResult.promotion);
-        setAppliedDiscount(calculationResult.discount);
-      } else {
-        clearPromotion();
-      }
+      // Filter promotions based on min_purchase
+      const eligiblePromotions = activePromotions.filter(promo => {
+        const minPurchase = parseFloat(promo.min_purchase) || 0;
+        return minPurchase === 0 || originalSubtotal >= minPurchase;
+      });
+      
+      setAvailablePromotions(eligiblePromotions);
     } catch (error) {
-      console.error('[CartContext] Promotion calculation error:', error);
+      console.error('[CartContext] Fetch promotions error:', error);
+      setAvailablePromotions([]);
     } finally {
       setIsCalculatingPromotion(false);
     }
   }, [cart, customerId, isWholesale, originalSubtotal]);
 
+  // Fetch promotions when cart changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      calculatePromotions();
+      fetchAvailablePromotions();
     }, 300);
-
     return () => clearTimeout(timer);
-  }, [cart, customerId, isWholesale, calculatePromotions]);
+  }, [cart, customerId, isWholesale, fetchAvailablePromotions]);
 
   useEffect(() => {
     if (cart.length === 0) {
@@ -237,7 +216,8 @@ export const CartProvider = ({ children }) => {
     setCartCustomer,
     customerId,
     cartErrors,
-    validateCart
+    validateCart,
+    fetchAvailablePromotions
   };
 
   return (

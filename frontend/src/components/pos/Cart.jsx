@@ -21,18 +21,16 @@ const Cart = ({
   originalSubtotal,
   availablePromotions = [],
   isCalculatingPromotion = false,
-  cartErrors = []
+  cartErrors = [],
+  onApplyPromotion,
+  onRemovePromotion
 }) => {
   const [showPromotions, setShowPromotions] = useState(true);
+  const [selectedPromotionId, setSelectedPromotionId] = useState(null);
 
   const hasPromotion = promotion && discountAmount > 0;
   const hasAvailablePromotions = availablePromotions.length > 0;
   const hasErrors = cartErrors.length > 0;
-  
-  const hasEligiblePromotions = availablePromotions.some(p => {
-    const minPurchase = parseFloat(p.min_purchase) || 0;
-    return minPurchase === 0 || originalSubtotal >= minPurchase;
-  });
 
   const promoColor = hasPromotion ? promotionService.getPromotionColor(promotion) : '';
   const promoDescription = hasPromotion ? promotionService.formatPromotionDescription(promotion) : '';
@@ -42,14 +40,38 @@ const Cart = ({
     return sum + (price * item.quantity * (item.discount_applied || 0) / 100);
   }, 0) + discountAmount;
 
+  const handleApplyPromotion = (promo) => {
+    // Calculate discount based on promotion type
+    let discount = 0;
+    if (promo.promotion_type === 'percentage') {
+      discount = originalSubtotal * (parseFloat(promo.discount_value) / 100);
+    } else if (promo.promotion_type === 'fixed') {
+      discount = parseFloat(promo.discount_value);
+    }
+    discount = Math.min(discount, originalSubtotal);
+    
+    if (onApplyPromotion) {
+      onApplyPromotion(promo, discount);
+      toast.success(`${promo.name} applied! -${formatCurrency(discount)}`);
+    }
+  };
+
+  const handleRemovePromotion = () => {
+    if (onRemovePromotion) {
+      onRemovePromotion();
+      toast.info('Promotion removed');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
+      {/* Header */}
       <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
         <div>
           <h2 className="text-sm font-700 text-text-primary">Current Sale</h2>
           <p className="text-xs text-text-muted">
             {itemCount} item{itemCount !== 1 ? 's' : ''}
-            {isCalculatingPromotion && ' Calculating...'}
+            {isCalculatingPromotion && ' Checking promotions...'}
           </p>
           {isWholesale && (
             <span className="text-xs text-primary font-600">Wholesale Mode</span>
@@ -83,6 +105,7 @@ const Cart = ({
         </div>
       </div>
 
+      {/* Error Messages */}
       {hasErrors && (
         <div className="px-4 py-2 bg-danger/10 border-b border-danger/20">
           {cartErrors.map((error, index) => (
@@ -93,8 +116,9 @@ const Cart = ({
         </div>
       )}
 
+      {/* Available Promotions - TOP SECTION */}
       {hasAvailablePromotions && (
-        <div className="px-4 py-2 border-b border-surface-border bg-primary/5">
+        <div className="px-3 py-2 border-b border-surface-border bg-primary/5">
           <button
             onClick={() => setShowPromotions(!showPromotions)}
             className="flex items-center justify-between w-full text-xs text-text-muted hover:text-text-primary transition-colors"
@@ -111,7 +135,7 @@ const Cart = ({
           </button>
 
           {showPromotions && (
-            <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto">
+            <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
               {availablePromotions.map((promo) => {
                 const minPurchase = parseFloat(promo.min_purchase) || 0;
                 const isEligible = minPurchase === 0 || originalSubtotal >= minPurchase;
@@ -122,43 +146,69 @@ const Cart = ({
                 return (
                   <div 
                     key={promo.promotion_id}
-                    className={`flex items-center justify-between p-2 rounded-lg text-xs transition-all
+                    className={`p-3 rounded-lg border transition-all
                       ${isApplied 
-                        ? 'bg-success/10 border border-success/30' 
+                        ? 'bg-success/10 border-success/30' 
                         : isEligible 
-                          ? 'bg-surface-card border border-surface-border' 
-                          : 'bg-surface-card border border-surface-border opacity-50'
+                          ? 'bg-surface-card border-surface-border hover:border-primary/50' 
+                          : 'bg-surface-card border-surface-border opacity-50'
                       }`}
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-600 ${isApplied ? 'text-success' : 'text-text-primary'}`}>
-                          {promo.name}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded ${promoColorClass} text-[10px]`}>
-                          {promoDisplay}
-                        </span>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`font-600 text-sm ${isApplied ? 'text-success' : 'text-text-primary'}`}>
+                            {promo.name}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded ${promoColorClass} text-[10px] font-500`}>
+                            {promoDisplay}
+                          </span>
+                          {promo.min_purchase > 0 && (
+                            <span className="text-text-faint text-[10px]">
+                              Min: {formatCurrency(promo.min_purchase)}
+                            </span>
+                          )}
+                        </div>
+                        {promo.description && (
+                          <p className="text-text-faint text-[10px] mt-0.5">{promo.description}</p>
+                        )}
+                        {!isEligible && minPurchase > 0 && (
+                          <p className="text-warning text-[10px] mt-0.5">
+                            Need {formatCurrency(minPurchase - originalSubtotal)} more to qualify
+                          </p>
+                        )}
                       </div>
-                      {promo.description && (
-                        <p className="text-text-faint text-[10px] mt-0.5">{promo.description}</p>
-                      )}
-                      {minPurchase > 0 && (
-                        <p className="text-text-faint text-[9px] mt-0.5">
-                          Min. purchase: {formatCurrency(minPurchase)}
-                        </p>
-                      )}
+                      <div>
+                        {isApplied ? (
+                          <button
+                            onClick={handleRemovePromotion}
+                            className="text-xs text-danger hover:underline font-500"
+                          >
+                            Remove
+                          </button>
+                        ) : isEligible ? (
+                          <button
+                            onClick={() => handleApplyPromotion(promo)}
+                            className="text-xs bg-primary text-white px-3 py-1 rounded-md hover:bg-primary/90 transition-all font-500"
+                          >
+                            Apply
+                          </button>
+                        ) : (
+                          <span className="text-xs text-text-faint">Locked</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {isApplied ? (
-                        <span className="text-success text-[10px] font-600">Applied</span>
-                      ) : isEligible ? (
-                        <span className="text-primary text-[10px] font-500">Eligible</span>
-                      ) : (
-                        <span className="text-text-faint text-[10px]">
-                          Need {formatCurrency(minPurchase - originalSubtotal)} more
-                        </span>
-                      )}
-                    </div>
+                    
+                    {/* Show what the discount would be */}
+                    {isEligible && !isApplied && (
+                      <div className="mt-1 text-xs text-success">
+                        Would save: {formatCurrency(
+                          promo.promotion_type === 'percentage' 
+                            ? originalSubtotal * (parseFloat(promo.discount_value) / 100)
+                            : parseFloat(promo.discount_value)
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -167,6 +217,7 @@ const Cart = ({
         </div>
       )}
 
+      {/* Cart Items */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
         {cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-text-faint">
@@ -188,6 +239,7 @@ const Cart = ({
         )}
       </div>
 
+      {/* Footer Summary */}
       {cart.length > 0 && (
         <div className="border-t border-surface-border p-4">
           <div className="space-y-1.5 mb-4">
@@ -248,7 +300,7 @@ const Cart = ({
               className="k-btn-primary w-full py-3.5 text-sm font-600"
               disabled={isCalculatingPromotion || hasErrors}
             >
-              {isCalculatingPromotion ? 'Calculating...' : 'Process Payment'}
+              {isCalculatingPromotion ? 'Checking promotions...' : 'Process Payment'}
             </button>
             
             {hasErrors && (
@@ -257,9 +309,9 @@ const Cart = ({
               </p>
             )}
             
-            {hasAvailablePromotions && !hasPromotion && hasEligiblePromotions && !hasErrors && (
+            {hasAvailablePromotions && !hasPromotion && (
               <p className="text-center text-[10px] text-primary font-500">
-                A promotion is available for this cart
+                Click "Apply" on a promotion above to add it to this sale
               </p>
             )}
           </div>
