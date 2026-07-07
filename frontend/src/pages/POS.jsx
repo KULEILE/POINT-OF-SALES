@@ -204,8 +204,6 @@ const POS = () => {
     toast.success(`Resumed sale for ${hold.customer_name || 'Walk-in Customer'}`);
   };
 
-  const formatM = (n) => `M ${parseFloat(n).toFixed(2)}`;
-
   return (
     <div className="flex h-full overflow-hidden">
 

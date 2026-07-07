@@ -556,13 +556,15 @@ const deletePromotion = async (req, res) => {
 };
 
 // ============================================================
-// PROMOTIONS - FRONTEND ENDPOINTS (NEW)
+// PROMOTIONS - FRONTEND ENDPOINTS
 // ============================================================
 
 const getActivePromotionsForFrontend = async (req, res) => {
   try {
     const customerId = req.query.customer_id || null;
     const isWholesale = req.query.is_wholesale === 'true';
+    
+    console.log('[getActivePromotionsForFrontend] Request params:', { customerId, isWholesale });
     
     let query = `
       SELECT p.*, 
@@ -577,14 +579,12 @@ const getActivePromotionsForFrontend = async (req, res) => {
     
     const params = [];
     
-    // Filter by wholesale/retail
     if (isWholesale) {
       query += ` AND p.applies_to_wholesale = TRUE`;
     } else {
       query += ` AND p.applies_to_retail = TRUE`;
     }
     
-    // Filter by customer eligibility
     if (customerId) {
       query += `
         AND (
@@ -603,23 +603,32 @@ const getActivePromotionsForFrontend = async (req, res) => {
     
     query += ` GROUP BY p.promotion_id ORDER BY p.priority DESC, p.discount_value DESC`;
     
+    console.log('[getActivePromotionsForFrontend] Query:', query);
+    console.log('[getActivePromotionsForFrontend] Params:', params);
+    
     const result = await pool.query(query, params);
+    
+    console.log('[getActivePromotionsForFrontend] Found:', result.rows.length, 'promotions');
     
     return res.json({ 
       success: true, 
       promotions: result.rows 
     });
   } catch (err) {
-    console.error('[getActivePromotionsForFrontend]', err.message);
+    console.error('[getActivePromotionsForFrontend] Error:', err.message);
+    console.error('[getActivePromotionsForFrontend] Stack:', err.stack);
     return res.status(500).json({ 
       success: false, 
-      message: 'Failed to fetch promotions' 
+      message: 'Failed to fetch promotions',
+      error: err.message 
     });
   }
 };
 
 const calculateCartPromotion = async (req, res) => {
   const { items, customer_id, subtotal, is_wholesale } = req.body;
+  
+  console.log('[calculateCartPromotion] Request body:', JSON.stringify(req.body, null, 2));
   
   if (!items || !items.length) {
     return res.json({ 
@@ -638,14 +647,12 @@ const calculateCartPromotion = async (req, res) => {
     
     const params = [];
     
-    // Filter by wholesale/retail
     if (is_wholesale) {
       query += ` AND p.applies_to_wholesale = TRUE`;
     } else {
       query += ` AND p.applies_to_retail = TRUE`;
     }
     
-    // Filter by customer eligibility
     if (customer_id) {
       query += `
         AND (
@@ -664,8 +671,13 @@ const calculateCartPromotion = async (req, res) => {
     
     query += ` ORDER BY p.priority DESC, p.discount_value DESC`;
     
+    console.log('[calculateCartPromotion] Query:', query);
+    console.log('[calculateCartPromotion] Params:', params);
+    
     const result = await pool.query(query, params);
     const promotions = result.rows;
+    
+    console.log('[calculateCartPromotion] Found promotions:', promotions.length);
     
     if (!promotions.length) {
       return res.json({ 
@@ -675,13 +687,18 @@ const calculateCartPromotion = async (req, res) => {
       });
     }
 
-    // Calculate cart subtotal
-    const cartSubtotal = subtotal || items.reduce((sum, item) => {
-      const price = parseFloat(item.unit_price) || 0;
-      const qty = parseFloat(item.quantity) || 0;
-      const discount = parseFloat(item.discount_applied) || 0;
-      return sum + (price * qty * (1 - discount / 100));
-    }, 0);
+    let cartSubtotal = subtotal || 0;
+    
+    if (!subtotal) {
+      cartSubtotal = items.reduce((sum, item) => {
+        const price = parseFloat(item.unit_price) || 0;
+        const qty = parseFloat(item.quantity) || 0;
+        const discount = parseFloat(item.discount_applied) || 0;
+        return sum + (price * qty * (1 - discount / 100));
+      }, 0);
+    }
+    
+    console.log('[calculateCartPromotion] Cart subtotal:', cartSubtotal);
 
     let bestPromotion = null;
     let bestDiscount = 0;
@@ -690,18 +707,25 @@ const calculateCartPromotion = async (req, res) => {
       const minPurchase = parseFloat(promo.min_purchase) || 0;
       const minQuantity = parseInt(promo.min_quantity) || 1;
       
-      // Check minimum purchase amount
+      console.log('[calculateCartPromotion] Checking promotion:', {
+        name: promo.name,
+        minPurchase,
+        minQuantity,
+        cartSubtotal
+      });
+      
       if (minPurchase > 0 && cartSubtotal < minPurchase) {
+        console.log('[calculateCartPromotion] Skipping - min purchase not met:', cartSubtotal, '<', minPurchase);
         continue;
       }
       
-      // Check minimum quantity (if any item meets the min quantity)
       if (minQuantity > 1) {
         const hasMinQuantity = items.some(item => {
           const qty = parseFloat(item.quantity) || 0;
           return qty >= minQuantity;
         });
         if (!hasMinQuantity) {
+          console.log('[calculateCartPromotion] Skipping - min quantity not met');
           continue;
         }
       }
@@ -713,14 +737,19 @@ const calculateCartPromotion = async (req, res) => {
         discount = parseFloat(promo.discount_value);
       }
 
-      // Cap discount at subtotal
       discount = Math.min(discount, cartSubtotal);
+      
+      console.log('[calculateCartPromotion] Calculated discount:', discount);
 
       if (discount > bestDiscount) {
         bestDiscount = discount;
         bestPromotion = promo;
+        console.log('[calculateCartPromotion] New best promotion:', promo.name, discount);
       }
     }
+
+    console.log('[calculateCartPromotion] Best promotion:', bestPromotion?.name || 'None');
+    console.log('[calculateCartPromotion] Best discount:', bestDiscount);
 
     return res.json({
       success: true,
@@ -729,10 +758,12 @@ const calculateCartPromotion = async (req, res) => {
       subtotal: cartSubtotal
     });
   } catch (err) {
-    console.error('[calculateCartPromotion]', err.message);
+    console.error('[calculateCartPromotion] Error:', err.message);
+    console.error('[calculateCartPromotion] Stack:', err.stack);
     return res.status(500).json({ 
       success: false, 
-      message: 'Failed to calculate promotion' 
+      message: 'Failed to calculate promotion',
+      error: err.message 
     });
   }
 };
@@ -764,7 +795,7 @@ const checkProductPromotions = async (req, res) => {
       promotion: result.rows[0] || null
     });
   } catch (err) {
-    console.error('[checkProductPromotions]', err.message);
+    console.error('[checkProductPromotions] Error:', err.message);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to check product promotions' 

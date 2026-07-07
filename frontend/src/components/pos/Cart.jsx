@@ -23,7 +23,7 @@ const Cart = ({
   isCalculatingPromotion = false,
   cartErrors = []
 }) => {
-  const [showPromotions, setShowPromotions] = useState(false);
+  const [showPromotions, setShowPromotions] = useState(true);
 
   const hasPromotion = promotion && discountAmount > 0;
   const hasAvailablePromotions = availablePromotions.length > 0;
@@ -197,7 +197,7 @@ const Cart = ({
             </div>
             
             {hasPromotion && (
-              <div className="flex justify-between text-sm text-success">
+              <div className="flex justify-between text-sm text-success font-600 bg-success/5 px-2 py-1 rounded-lg border border-success/20">
                 <span className="flex items-center gap-1">
                   <span>Promotion: {promotion?.name}</span>
                   <span className="text-[10px] text-text-faint font-normal">
@@ -235,7 +235,7 @@ const Cart = ({
             </div>
 
             {totalSavings > 0 && (
-              <div className="flex justify-between text-xs text-success">
+              <div className="flex justify-between text-xs text-success font-600">
                 <span>Total Savings</span>
                 <span>{formatCurrency(totalSavings)}</span>
               </div>

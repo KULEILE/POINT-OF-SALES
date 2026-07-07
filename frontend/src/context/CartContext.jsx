@@ -33,14 +33,12 @@ export const CartProvider = ({ children }) => {
           toast.error(stockValidation.message);
           return prev;
         }
-        
         return prev.map(i => 
           i.product_id === product.product_id 
             ? { ...i, quantity: newQty, unit_price: priceToUse } 
             : i
         );
       }
-      
       return [...prev, { 
         ...product, 
         quantity: 1, 
@@ -50,7 +48,6 @@ export const CartProvider = ({ children }) => {
         tax_exempt: product.tax_exempt || false
       }];
     });
-    
     return true;
   }, []);
 
@@ -69,11 +66,9 @@ export const CartProvider = ({ children }) => {
       removeFromCart(id); 
       return; 
     }
-    
     setCart(prev => {
       const item = prev.find(i => i.product_id === id);
       if (!item) return prev;
-      
       const product = {
         ...item,
         stock_quantity: item.stock_quantity || 0
@@ -83,7 +78,6 @@ export const CartProvider = ({ children }) => {
         toast.error(validation.message);
         return prev;
       }
-      
       return prev.map(i => i.product_id === id ? { ...i, quantity: qty } : i);
     });
   }, [removeFromCart]);
@@ -139,33 +133,42 @@ export const CartProvider = ({ children }) => {
     if (cart.length === 0) {
       clearPromotion();
       setAvailablePromotions([]);
+      setIsCalculatingPromotion(false);
       return;
     }
 
     setIsCalculatingPromotion(true);
+    
     try {
-      const response = await promotionService.getActivePromotions(customerId);
-      const activePromotions = response.data.promotions || [];
+      const response = await promotionService.getActivePromotions(customerId, isWholesale);
+      const activePromotions = response.promotions || [];
       setAvailablePromotions(activePromotions);
 
-      const cartData = cart.map(item => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price || item.selling_price,
-        discount_applied: item.discount_applied || 0,
-        tax_rate: item.tax_rate || 15,
-        tax_exempt: item.tax_exempt || false
-      }));
+      if (activePromotions.length === 0) {
+        clearPromotion();
+        setIsCalculatingPromotion(false);
+        return;
+      }
 
-      const calculationResponse = await promotionService.calculateCartPromotion({
-        items: cartData,
+      const cartData = {
+        items: cart.map(item => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price || item.selling_price,
+          discount_applied: item.discount_applied || 0,
+          tax_rate: item.tax_rate || 15,
+          tax_exempt: item.tax_exempt || false
+        })),
         customer_id: customerId,
-        subtotal: originalSubtotal
-      });
+        subtotal: originalSubtotal,
+        is_wholesale: isWholesale
+      };
 
-      if (calculationResponse.data.promotion) {
-        setAppliedPromotion(calculationResponse.data.promotion);
-        setAppliedDiscount(calculationResponse.data.discount);
+      const calculationResult = await promotionService.calculateCartPromotion(cartData);
+      
+      if (calculationResult.promotion && calculationResult.discount > 0) {
+        setAppliedPromotion(calculationResult.promotion);
+        setAppliedDiscount(calculationResult.discount);
       } else {
         clearPromotion();
       }
@@ -174,14 +177,15 @@ export const CartProvider = ({ children }) => {
     } finally {
       setIsCalculatingPromotion(false);
     }
-  }, [cart, customerId, originalSubtotal]);
+  }, [cart, customerId, isWholesale, originalSubtotal]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       calculatePromotions();
     }, 300);
+
     return () => clearTimeout(timer);
-  }, [cart, customerId, calculatePromotions]);
+  }, [cart, customerId, isWholesale, calculatePromotions]);
 
   useEffect(() => {
     if (cart.length === 0) {

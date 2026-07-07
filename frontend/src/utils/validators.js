@@ -1,7 +1,3 @@
-// ============================================================
-// BASIC VALIDATORS
-// ============================================================
-
 export const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 export const isPhone = (v) => /^(\+266)?[0-9]{8}$/.test(v.replace(/\s/g,''));
@@ -16,17 +12,9 @@ export const isNumber = (v) => !isNaN(parseFloat(v)) && isFinite(v);
 
 export const isInteger = (v) => Number.isInteger(parseFloat(v)) && parseFloat(v) >= 0;
 
-// ============================================================
-// FORMAT CURRENCY
-// ============================================================
-
 export const formatCurrency = (amount) => {
   return `M ${parseFloat(amount || 0).toFixed(2)}`;
 };
-
-// ============================================================
-// PRODUCT VALIDATION
-// ============================================================
 
 export const validateProduct = (data) => {
   const errors = {};
@@ -43,10 +31,6 @@ export const validateProduct = (data) => {
   return errors;
 };
 
-// ============================================================
-// USER VALIDATION
-// ============================================================
-
 export const validateUser = (data) => {
   const errors = {};
   if (!isRequired(data.full_name)) errors.full_name = 'Full name is required.';
@@ -61,10 +45,6 @@ export const validateUser = (data) => {
   return errors;
 };
 
-// ============================================================
-// CUSTOMER VALIDATION
-// ============================================================
-
 export const validateCustomer = (data) => {
   const errors = {};
   if (!isRequired(data.full_name)) errors.full_name = 'Full name is required.';
@@ -72,10 +52,6 @@ export const validateCustomer = (data) => {
   if (data.phone && !isPhone(data.phone)) errors.phone = 'Invalid phone number format.';
   return errors;
 };
-
-// ============================================================
-// CART STOCK VALIDATION
-// ============================================================
 
 export const validateCartStock = (cart) => {
   const errors = [];
@@ -116,10 +92,6 @@ export const validateCartStock = (cart) => {
   };
 };
 
-// ============================================================
-// PRODUCT STOCK VALIDATION (Single Product)
-// ============================================================
-
 export const validateProductStock = (product, quantity = 1) => {
   const requestedQty = parseFloat(quantity) || 0;
   const availableQty = parseFloat(product.stock_quantity || product.quantity || product.stock || 0);
@@ -143,10 +115,6 @@ export const validateProductStock = (product, quantity = 1) => {
     message: null
   };
 };
-
-// ============================================================
-// SALE VALIDATION
-// ============================================================
 
 export const validateSale = (data) => {
   const errors = {};
@@ -177,10 +145,6 @@ export const validateSale = (data) => {
   return errors;
 };
 
-// ============================================================
-// CUSTOMER CREDIT VALIDATION
-// ============================================================
-
 export const validateCustomerCredit = (customer, total) => {
   if (!customer) return { valid: true };
   
@@ -195,10 +159,6 @@ export const validateCustomerCredit = (customer, total) => {
   
   return { valid: true };
 };
-
-// ============================================================
-// PAYMENT VALIDATION
-// ============================================================
 
 export const validatePayment = (data) => {
   const errors = {};
@@ -221,10 +181,6 @@ export const validatePayment = (data) => {
   return errors;
 };
 
-// ============================================================
-// RETURN VALIDATION
-// ============================================================
-
 export const validateReturn = (data) => {
   const errors = {};
   
@@ -242,10 +198,6 @@ export const validateReturn = (data) => {
   
   return errors;
 };
-
-// ============================================================
-// PROMOTION VALIDATION
-// ============================================================
 
 export const validatePromotion = (data) => {
   const errors = {};
@@ -272,10 +224,6 @@ export const validatePromotion = (data) => {
   
   return errors;
 };
-
-// ============================================================
-// EXPORT ALL
-// ============================================================
 
 export default {
   isEmail,
