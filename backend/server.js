@@ -7,7 +7,7 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 // ============================================================
-// CORS CONFIGURATION - Allow multiple frontend URLs
+// CORS CONFIGURATION - Chrome compatible
 // ============================================================
 
 const allowedOrigins = [
@@ -18,26 +18,45 @@ const allowedOrigins = [
   'http://localhost:5173'
 ];
 
+// Add FRONTEND_URL from env if set
 if (process.env.FRONTEND_URL) {
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
 app.use(cors({
   origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
     if (!origin) {
       return callback(null, true);
     }
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log(`[CORS] Blocked origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+    // Check if origin is allowed
+    const isAllowed = allowedOrigins.some(allowed => {
+      // Exact match
+      if (allowed === origin) return true;
+      // Match without trailing slash
+      if (allowed.replace(/\/$/, '') === origin.replace(/\/$/, '')) return true;
+      // Wildcard for Render subdomains
+      if (allowed.includes('*.onrender.com') && origin.includes('onrender.com')) return true;
+      // Check if origin contains onrender.com (for any Render subdomain)
+      if (origin.includes('onrender.com')) return true;
+      // Check for localhost (development)
+      if (origin.includes('localhost')) return true;
+      return false;
+    });
+    
+    if (isAllowed) {
+      return callback(null, true);
     }
+    
+    console.log(`[CORS] Blocked origin: ${origin}`);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400  // Cache preflight for 24 hours (helps Chrome)
 }));
 
 // ============================================================
@@ -98,7 +117,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/holds', require('./routes/holds'));
-app.use('/api/shifts', require('./routes/shifts')); // ADD THIS LINE
+app.use('/api/shifts', require('./routes/shifts'));
 
 // ============================================================
 // ROOT ROUTE
@@ -123,7 +142,7 @@ app.get('/', (req, res) => {
       users: '/api/users',
       audit: '/api/audit',
       settings: '/api/settings',
-      shifts: '/api/shifts' // ADD THIS
+      shifts: '/api/shifts'
     }
   });
 });
@@ -151,7 +170,7 @@ app.use((req, res) => {
       '/api/users',
       '/api/audit',
       '/api/settings',
-      '/api/shifts' // ADD THIS
+      '/api/shifts'
     ]
   });
 });
