@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import ProductGrid from '../components/pos/ProductGrid';
 import Cart from '../components/pos/Cart';
@@ -60,9 +60,12 @@ const POS = () => {
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [showHeldSales, setShowHeldSales] = useState(false);
 
+  // Memoize to prevent unnecessary re-renders
+  const canProcessSalesMemo = useMemo(() => canProcessSales, [canProcessSales]);
+
   // Wrapper for addToCart with clock-in check
   const handleAddToCart = (product, wholesale = false) => {
-    if (!canProcessSales) {
+    if (!canProcessSalesMemo) {
       toast.error('Please clock in before adding products to cart.');
       return false;
     }
@@ -107,7 +110,7 @@ const POS = () => {
 
   const handleCheckout = () => {
     // Check if user is clocked in
-    if (!canProcessSales) {
+    if (!canProcessSalesMemo) {
       toast.error('Please clock in before processing sales.');
       return;
     }
@@ -254,7 +257,7 @@ const POS = () => {
             >
               {isWholesale ? 'Wholesale' : 'Retail'}
             </button>
-            {!canProcessSales && !shiftLoading && (
+            {!canProcessSalesMemo && !shiftLoading && (
               <span className="text-xs text-danger font-600 bg-danger/10 px-2 py-1 rounded-lg">
                 Not Clocked In
               </span>
@@ -278,7 +281,7 @@ const POS = () => {
           </div>
         </div>
 
-        {!canProcessSales && !shiftLoading && (
+        {!canProcessSalesMemo && !shiftLoading && (
           <div className="bg-danger/10 border border-danger/30 rounded-lg px-4 py-2 flex items-center justify-between">
             <p className="text-xs text-danger font-600">Please clock in to start selling</p>
             <span className="text-xs text-text-muted">Click "Clock In" in the header</span>
@@ -310,7 +313,7 @@ const POS = () => {
             onAddToCart={handleAddToCart}
             refreshTrigger={refreshKey}
             isWholesale={isWholesale}
-            canProcessSales={canProcessSales}
+            canProcessSales={canProcessSalesMemo}
           />
         </div>
       </div>
@@ -339,7 +342,7 @@ const POS = () => {
           cartErrors={cartErrors}
           onApplyPromotion={handleApplyPromotion}
           onRemovePromotion={handleRemovePromotion}
-          canProcessSales={canProcessSales}
+          canProcessSales={canProcessSalesMemo}
         />
       </div>
 
