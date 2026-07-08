@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { ShiftProvider } from './context/ShiftContext';
 import Splash    from './pages/Splash';
 import Welcome   from './pages/Welcome';
 import Login     from './pages/Login';
@@ -33,7 +34,6 @@ const PAGES = {
   settings:  { component: Settings,  label: 'Settings' },
 };
 
-// Define which roles can access each page
 const PAGE_ROLES = {
   dashboard: ['admin', 'manager'],
   pos:       ['admin', 'manager', 'cashier'],
@@ -47,7 +47,6 @@ const PAGE_ROLES = {
   settings:  ['admin'],
 };
 
-// Default page based on user role
 const getDefaultPage = (role) => {
   if (role === 'admin' || role === 'manager' || role === 'auditor') {
     return 'dashboard';
@@ -60,10 +59,8 @@ const AppInner = () => {
   const [screen, setScreen] = useState('splash');
   const [page, setPage] = useState('dashboard');
 
-  // Splash done → check auth
   const handleSplashDone = () => {
     if (user) {
-      // Redirect to appropriate default page based on role
       const defaultPage = getDefaultPage(user.role);
       setPage(defaultPage);
       setScreen('app');
@@ -86,11 +83,9 @@ const AppInner = () => {
     return null;
   }
 
-  // Check if user has access to the current page
   const allowedRoles = PAGE_ROLES[page] || ['admin', 'manager'];
   const hasAccess = user && allowedRoles.includes(user.role);
 
-  // If no access, redirect to default page
   if (!hasAccess) {
     const defaultPage = getDefaultPage(user.role);
     setPage(defaultPage);
@@ -115,17 +110,19 @@ const AppInner = () => {
 
 const App = () => (
   <AuthProvider>
-    <CartProvider>
-      <AppInner />
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          style: { background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' },
-          success: { iconTheme: { primary: '#06B6D4', secondary: '#F8FAFC' } },
-          error:   { iconTheme: { primary: '#EF4444', secondary: '#F8FAFC' } },
-        }}
-      />
-    </CartProvider>
+    <ShiftProvider>
+      <CartProvider>
+        <AppInner />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: { background: '#1E293B', color: '#F8FAFC', border: '1px solid #334155' },
+            success: { iconTheme: { primary: '#06B6D4', secondary: '#F8FAFC' } },
+            error:   { iconTheme: { primary: '#EF4444', secondary: '#F8FAFC' } },
+          }}
+        />
+      </CartProvider>
+    </ShiftProvider>
   </AuthProvider>
 );
 

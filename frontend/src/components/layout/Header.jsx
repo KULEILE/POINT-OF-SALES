@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import ShiftStatus from './ShiftStatus';
 import toast from 'react-hot-toast';
 
 const Header = ({ currentPage }) => {
@@ -27,6 +28,7 @@ const Header = ({ currentPage }) => {
         </p>
       </div>
       <div className="flex items-center gap-4">
+        <ShiftStatus />
         <div className="text-right hidden sm:block">
           <p className="text-sm font-600 text-text-primary">{user?.full_name}</p>
           <p className="text-xs text-primary capitalize">{user?.role}</p>

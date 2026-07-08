@@ -80,14 +80,12 @@ const getActivePromotions = async (customer_id = null, is_wholesale = false) => 
   return result.rows;
 };
 
-// Validate a specific promotion for a cart
 const validatePromotionForCart = (promotion, subtotal, items) => {
   if (!promotion) return { valid: true };
   
   const minPurchase = parseFloat(promotion.min_purchase) || 0;
   const minQuantity = parseInt(promotion.min_quantity) || 1;
   
-  // Check minimum purchase amount
   if (minPurchase > 0 && subtotal < minPurchase) {
     return {
       valid: false,
@@ -95,7 +93,6 @@ const validatePromotionForCart = (promotion, subtotal, items) => {
     };
   }
   
-  // Check minimum quantity
   if (minQuantity > 1) {
     const hasMinQuantity = items.some(item => {
       const qty = parseFloat(item.quantity) || 0;
@@ -112,7 +109,6 @@ const validatePromotionForCart = (promotion, subtotal, items) => {
   return { valid: true };
 };
 
-// Calculate discount for a specific promotion
 const calculatePromotionDiscount = (promotion, subtotal) => {
   if (!promotion) return 0;
   
@@ -144,7 +140,7 @@ const create = async (req, res) => {
     is_wholesale,
     wholesale_discount,
     payment_splits,
-    promotion_id  // NEW: manually selected promotion ID
+    promotion_id
   } = req.body;
 
   if (!items || !items.length) {
@@ -188,6 +184,16 @@ const create = async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // ============================================================
+    // GET CURRENT SHIFT FOR THIS CASHIER
+    // ============================================================
+    const shiftResult = await client.query(
+      `SELECT shift_id FROM shifts 
+       WHERE user_id = $1 AND status = 'open'`,
+      [req.user.user_id]
+    );
+    const shiftId = shiftResult.rows[0]?.shift_id || null;
 
     const settings = await getWholesaleSettings();
     const tiers = await getDiscountTiers();
@@ -270,9 +276,7 @@ const create = async (req, res) => {
     let appliedPromotion = null;
     let appliedDiscount = 0;
 
-    // If a promotion_id was provided, validate and apply it
     if (promotion_id) {
-      // Fetch the promotion details
       const promoResult = await client.query(
         `SELECT * FROM promotions WHERE promotion_id = $1 AND is_active = TRUE`,
         [promotion_id]
@@ -281,11 +285,9 @@ const create = async (req, res) => {
       const promotion = promoResult.rows[0];
       
       if (promotion) {
-        // Validate the promotion against the cart
         const validation = validatePromotionForCart(promotion, subtotal, processedItems);
         
         if (validation.valid) {
-          // Check customer eligibility
           if (promotion.applies_to === 'specific' && customer_id) {
             const customerCheck = await client.query(
               `SELECT 1 FROM promotion_customers 
@@ -305,7 +307,6 @@ const create = async (req, res) => {
             });
           }
           
-          // Calculate the discount
           appliedDiscount = calculatePromotionDiscount(promotion, subtotal);
           appliedPromotion = promotion;
         } else {
@@ -321,11 +322,8 @@ const create = async (req, res) => {
         });
       }
     } else {
-      // If no promotion selected, check if any auto-applicable promotions exist
-      // (Optional: You can keep this for backward compatibility)
       const promotions = await getActivePromotions(customer_id || null, isWholesale);
       if (promotions.length > 0) {
-        // Find the best promotion that auto-applies (without manual selection)
         for (const promo of promotions) {
           const validation = validatePromotionForCart(promo, subtotal, processedItems);
           if (validation.valid) {
@@ -339,7 +337,6 @@ const create = async (req, res) => {
       }
     }
 
-    // Pre-tax subtotal after the promotion discount
     const discountedSubtotal = Math.max(0, subtotal - appliedDiscount);
 
     // ============================================================
@@ -395,6 +392,9 @@ const create = async (req, res) => {
     const transactionType = payment_method;
     const displaySubtotal = originalSubtotal;
 
+    // ============================================================
+    // INSERT TRANSACTION WITH SHIFT_ID
+    // ============================================================
     const txResult = await client.query(
       `INSERT INTO transactions (
         receipt_number, customer_id, customer_phone, is_guest,
@@ -404,7 +404,8 @@ const create = async (req, res) => {
         amount_paid, change_amount, balance_due,
         payment_status, status, notes,
         duration_days, due_date, customer_type,
-        promotion_id, discount_amount
+        promotion_id, discount_amount,
+        shift_id
       ) VALUES (
         'PENDING', $1, $2, $3,
         $4, $5,
@@ -413,7 +414,8 @@ const create = async (req, res) => {
         $12, $13, $14,
         $15, 'completed', $16,
         $17, $18, $19,
-        $20, $21
+        $20, $21,
+        $22
       ) RETURNING *`,
       [
         customer_id || null,
@@ -436,10 +438,24 @@ const create = async (req, res) => {
         due_date.toISOString().split('T')[0],
         finalCustomerType,
         appliedPromotion ? appliedPromotion.promotion_id : null,
-        appliedDiscount.toFixed(2)
+        appliedDiscount.toFixed(2),
+        shiftId
       ]
     );
     const tx = txResult.rows[0];
+
+    // ============================================================
+    // UPDATE SHIFT TOTALS
+    // ============================================================
+    if (shiftId) {
+      await client.query(
+        `UPDATE shifts 
+         SET sales_total = COALESCE(sales_total, 0) + $1,
+             transaction_count = COALESCE(transaction_count, 0) + 1
+         WHERE shift_id = $2`,
+        [finalTotal, shiftId]
+      );
+    }
 
     if (appliedPromotion && appliedDiscount > 0) {
       await client.query(
@@ -561,7 +577,7 @@ const create = async (req, res) => {
       user_id: req.user.user_id,
       username: req.user.username,
       action_type: 'SALE',
-      action_details: `${payment_method.toUpperCase()} ${finalCustomerType.toUpperCase()} sale — M ${finalTotal.toFixed(2)} — Receipt: ${tx.receipt_number}${appliedPromotion ? ` — Promotion: ${appliedPromotion.name} (${formatCurrency(appliedDiscount)})` : ''}`,
+      action_details: `${payment_method.toUpperCase()} ${finalCustomerType.toUpperCase()} sale — M ${finalTotal.toFixed(2)} — Receipt: ${tx.receipt_number}${appliedPromotion ? ` — Promotion: ${appliedPromotion.name} (${formatCurrency(appliedDiscount)})` : ''}${shiftId ? ` — Shift #${shiftId}` : ''}`,
       affected_table: 'transactions',
       affected_record_id: tx.transaction_id,
     });
@@ -582,7 +598,8 @@ const create = async (req, res) => {
       transaction: final.rows[0],
       payment_splits: splits.rows,
       promotion_applied: appliedPromotion,
-      discount_amount: appliedDiscount
+      discount_amount: appliedDiscount,
+      shift_id: shiftId
     });
 
   } catch (err) {
@@ -614,10 +631,12 @@ const getAll = async (req, res) => {
              t.discount_amount,
              c.full_name AS customer_name,
              p.name AS promotion_name,
+             s.shift_id,
              (SELECT COUNT(*) FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id) AS item_count
       FROM transactions t
       LEFT JOIN customers c ON t.customer_id = c.customer_id
       LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
+      LEFT JOIN shifts s ON t.shift_id = s.shift_id
       WHERE 1=1`;
     const params = [];
 
@@ -670,10 +689,12 @@ const getById = async (req, res) => {
   try {
     const tx = await pool.query(
       `SELECT t.*, u.full_name AS cashier_full,
-              p.name AS promotion_name
+              p.name AS promotion_name,
+              s.shift_id, s.clock_in as shift_clock_in, s.clock_out as shift_clock_out
        FROM transactions t
        LEFT JOIN users u ON t.cashier_id = u.user_id
        LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
+       LEFT JOIN shifts s ON t.shift_id = s.shift_id
        WHERE t.transaction_id = $1`,
       [req.params.id]
     );
@@ -720,10 +741,12 @@ const getByReceipt = async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT t.*, u.full_name AS cashier_full,
-              p.name AS promotion_name
+              p.name AS promotion_name,
+              s.shift_id
        FROM transactions t
        LEFT JOIN users u ON t.cashier_id = u.user_id
        LEFT JOIN promotions p ON t.promotion_id = p.promotion_id
+       LEFT JOIN shifts s ON t.shift_id = s.shift_id
        WHERE t.receipt_number = $1`,
       [req.params.receipt_number]
     );

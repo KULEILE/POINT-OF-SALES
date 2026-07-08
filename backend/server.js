@@ -98,6 +98,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/holds', require('./routes/holds'));
+app.use('/api/shifts', require('./routes/shifts')); // ADD THIS LINE
 
 // ============================================================
 // ROOT ROUTE
@@ -121,7 +122,8 @@ app.get('/', (req, res) => {
       reports: '/api/reports',
       users: '/api/users',
       audit: '/api/audit',
-      settings: '/api/settings'
+      settings: '/api/settings',
+      shifts: '/api/shifts' // ADD THIS
     }
   });
 });
@@ -148,7 +150,8 @@ app.use((req, res) => {
       '/api/reports',
       '/api/users',
       '/api/audit',
-      '/api/settings'
+      '/api/settings',
+      '/api/shifts' // ADD THIS
     ]
   });
 });
