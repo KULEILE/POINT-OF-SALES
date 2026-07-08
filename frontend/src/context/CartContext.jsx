@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { promotionService } from '../services/promotionService';
 import { validateProductStock } from '../utils/validators';
 import toast from 'react-hot-toast';
@@ -14,9 +14,10 @@ export const CartProvider = ({ children }) => {
   const [customerId, setCustomerId] = useState(null);
   const [isCalculatingPromotion, setIsCalculatingPromotion] = useState(false);
   const [cartErrors, setCartErrors] = useState([]);
+  const isMounted = useRef(true);
+  const fetchTimeout = useRef(null);
 
-  // Note: Clock-in check is now handled in POS.jsx via handleAddToCart wrapper
-  // This function remains pure for cart operations
+  // Add to cart
   const addToCart = useCallback((product, wholesale = false) => {
     const validation = validateProductStock(product, 1);
     if (!validation.valid) {
@@ -61,6 +62,9 @@ export const CartProvider = ({ children }) => {
     setCart([]);
     clearPromotion();
     setCartErrors([]);
+    if (fetchTimeout.current) {
+      clearTimeout(fetchTimeout.current);
+    }
   }, []);
 
   const updateQuantity = useCallback((id, qty) => {
@@ -100,6 +104,7 @@ export const CartProvider = ({ children }) => {
     setCustomerId(customer?.customer_id || null);
   }, []);
 
+  // Calculate totals
   const originalSubtotal = cart.reduce((sum, item) => {
     const price = item.unit_price || item.selling_price;
     return sum + (price * item.quantity * (1 - (item.discount_applied || 0) / 100));
@@ -131,7 +136,13 @@ export const CartProvider = ({ children }) => {
     setAppliedDiscount(0);
   }, []);
 
+  // Fetch promotions - with proper cleanup
   const fetchAvailablePromotions = useCallback(async () => {
+    // Clear any pending timeout
+    if (fetchTimeout.current) {
+      clearTimeout(fetchTimeout.current);
+    }
+
     if (cart.length === 0) {
       setAvailablePromotions([]);
       return;
@@ -141,6 +152,8 @@ export const CartProvider = ({ children }) => {
     
     try {
       const response = await promotionService.getActivePromotions(customerId, isWholesale);
+      if (!isMounted.current) return;
+      
       const activePromotions = response.promotions || [];
       setAvailablePromotions(activePromotions);
       
@@ -166,18 +179,60 @@ export const CartProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('[CartContext] Error fetching promotions:', error);
-      setAvailablePromotions([]);
+      if (isMounted.current) {
+        setAvailablePromotions([]);
+      }
     } finally {
-      setIsCalculatingPromotion(false);
+      if (isMounted.current) {
+        setIsCalculatingPromotion(false);
+      }
     }
-  }, [cart, customerId, isWholesale, originalSubtotal, appliedPromotion]);
+  }, [cart.length, customerId, isWholesale, originalSubtotal, appliedPromotion]);
+
+  // Use a ref to track cart changes without causing infinite loops
+  const prevCartLength = useRef(0);
+  const prevCustomerId = useRef(null);
+  const prevIsWholesale = useRef(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchAvailablePromotions();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [cart, customerId, isWholesale, fetchAvailablePromotions]);
+    isMounted.current = true;
+    
+    // Only fetch if cart actually changed
+    const cartChanged = cart.length !== prevCartLength.current;
+    const customerChanged = customerId !== prevCustomerId.current;
+    const wholesaleChanged = isWholesale !== prevIsWholesale.current;
+    
+    if (cartChanged || customerChanged || wholesaleChanged) {
+      prevCartLength.current = cart.length;
+      prevCustomerId.current = customerId;
+      prevIsWholesale.current = isWholesale;
+      
+      // Debounce the fetch
+      if (fetchTimeout.current) {
+        clearTimeout(fetchTimeout.current);
+      }
+      
+      fetchTimeout.current = setTimeout(() => {
+        fetchAvailablePromotions();
+      }, 500);
+    }
+    
+    return () => {
+      if (fetchTimeout.current) {
+        clearTimeout(fetchTimeout.current);
+      }
+    };
+  }, [cart.length, customerId, isWholesale, fetchAvailablePromotions]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      if (fetchTimeout.current) {
+        clearTimeout(fetchTimeout.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (cart.length === 0) {
