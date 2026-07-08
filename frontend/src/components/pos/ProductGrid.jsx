@@ -3,7 +3,7 @@ import { productService } from '../../services/productService';
 import ProductCard from './ProductCard';
 import toast from 'react-hot-toast';
 
-const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale }) => {
+const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales = true }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +27,11 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale }) => {
 
   const handleBarcode = async (e) => {
     if (e.key === 'Enter' && barcode.trim()) {
+      if (!canProcessSales) {
+        toast.error('Please clock in before adding products.');
+        setBarcode('');
+        return;
+      }
       try {
         const r = await productService.getByBarcode(barcode.trim());
         const product = r.data.product;
@@ -59,16 +64,22 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale }) => {
           onChange={e => setSearch(e.target.value)} 
         />
         <input 
-          className="k-input w-44 py-2 text-sm" 
+          className={`k-input w-44 py-2 text-sm ${!canProcessSales ? 'opacity-50 cursor-not-allowed' : ''}`}
           placeholder="Scan barcode..." 
           value={barcode} 
           onChange={e => setBarcode(e.target.value)} 
           onKeyDown={handleBarcode} 
+          disabled={!canProcessSales}
         />
       </div>
       {isWholesale && (
         <div className="bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 text-xs text-primary font-500">
           Wholesale prices shown
+        </div>
+      )}
+      {!canProcessSales && (
+        <div className="bg-danger/5 border border-danger/20 rounded-lg px-3 py-1.5 text-xs text-danger font-500">
+          Clock in to add products to cart
         </div>
       )}
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -115,6 +126,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale }) => {
                 product={p} 
                 onAdd={onAddToCart} 
                 isWholesale={isWholesale}
+                canProcessSales={canProcessSales}
               />
             ))}
           </div>

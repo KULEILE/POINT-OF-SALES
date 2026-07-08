@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import CartItem from './CartItem';
 import { formatCurrency } from '../../utils/formatters';
 import { promotionService } from '../../services/promotionService';
+import toast from 'react-hot-toast';
 
 const Cart = ({ 
   cart, 
@@ -23,14 +24,15 @@ const Cart = ({
   isCalculatingPromotion = false,
   cartErrors = [],
   onApplyPromotion,
-  onRemovePromotion
+  onRemovePromotion,
+  canProcessSales = true
 }) => {
   const [showPromotions, setShowPromotions] = useState(true);
-  const [selectedPromotionId, setSelectedPromotionId] = useState(null);
 
   const hasPromotion = promotion && discountAmount > 0;
   const hasAvailablePromotions = availablePromotions.length > 0;
   const hasErrors = cartErrors.length > 0;
+  const isCheckoutDisabled = isCalculatingPromotion || hasErrors || !canProcessSales;
 
   const promoColor = hasPromotion ? promotionService.getPromotionColor(promotion) : '';
   const promoDescription = hasPromotion ? promotionService.formatPromotionDescription(promotion) : '';
@@ -41,7 +43,6 @@ const Cart = ({
   }, 0) + discountAmount;
 
   const handleApplyPromotion = (promo) => {
-    // Calculate discount based on promotion type
     let discount = 0;
     if (promo.promotion_type === 'percentage') {
       discount = originalSubtotal * (parseFloat(promo.discount_value) / 100);
@@ -65,7 +66,6 @@ const Cart = ({
 
   return (
     <div className="flex flex-col h-full bg-surface-panel border-l border-surface-border">
-      {/* Header */}
       <div className="px-4 py-3 border-b border-surface-border flex items-center justify-between">
         <div>
           <h2 className="text-sm font-700 text-text-primary">Current Sale</h2>
@@ -80,6 +80,9 @@ const Cart = ({
             <span className={`text-xs font-600 ml-1 px-1.5 py-0.5 rounded ${promoColor}`}>
               {promoDescription} Applied
             </span>
+          )}
+          {!canProcessSales && (
+            <span className="text-xs text-danger font-600 ml-1">Not Clocked In</span>
           )}
           {hasErrors && (
             <span className="text-xs text-danger font-600 ml-1">
@@ -105,7 +108,12 @@ const Cart = ({
         </div>
       </div>
 
-      {/* Error Messages */}
+      {!canProcessSales && cart.length === 0 && (
+        <div className="px-4 py-3 bg-danger/10 border-b border-danger/20 text-center">
+          <p className="text-xs text-danger font-500">Please clock in to start selling</p>
+        </div>
+      )}
+
       {hasErrors && (
         <div className="px-4 py-2 bg-danger/10 border-b border-danger/20">
           {cartErrors.map((error, index) => (
@@ -116,7 +124,6 @@ const Cart = ({
         </div>
       )}
 
-      {/* Available Promotions - TOP SECTION */}
       {hasAvailablePromotions && (
         <div className="px-3 py-2 border-b border-surface-border bg-primary/5">
           <button
@@ -190,6 +197,7 @@ const Cart = ({
                           <button
                             onClick={() => handleApplyPromotion(promo)}
                             className="text-xs bg-primary text-white px-3 py-1 rounded-md hover:bg-primary/90 transition-all font-500"
+                            disabled={!canProcessSales}
                           >
                             Apply
                           </button>
@@ -199,7 +207,6 @@ const Cart = ({
                       </div>
                     </div>
                     
-                    {/* Show what the discount would be */}
                     {isEligible && !isApplied && (
                       <div className="mt-1 text-xs text-success">
                         Would save: {formatCurrency(
@@ -217,13 +224,15 @@ const Cart = ({
         </div>
       )}
 
-      {/* Cart Items */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
         {cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-text-faint">
             <p className="text-3xl mb-2">—</p>
             <p className="text-sm font-500">Cart is empty</p>
             <p className="text-xs mt-1">Add products to start a sale</p>
+            {!canProcessSales && (
+              <p className="text-xs text-danger mt-2 font-500">Please clock in first</p>
+            )}
           </div>
         ) : (
           cart.map(item => (
@@ -239,7 +248,6 @@ const Cart = ({
         )}
       </div>
 
-      {/* Footer Summary */}
       {cart.length > 0 && (
         <div className="border-t border-surface-border p-4">
           <div className="space-y-1.5 mb-4">
@@ -297,19 +305,30 @@ const Cart = ({
           <div className="space-y-2">
             <button 
               onClick={onCheckout} 
-              className="k-btn-primary w-full py-3.5 text-sm font-600"
-              disabled={isCalculatingPromotion || hasErrors}
+              className={`w-full py-3.5 text-sm font-600 rounded-lg transition-all
+                ${isCheckoutDisabled 
+                  ? 'bg-surface-border text-text-faint cursor-not-allowed' 
+                  : 'k-btn-primary'}`}
+              disabled={isCheckoutDisabled}
             >
-              {isCalculatingPromotion ? 'Checking promotions...' : 'Process Payment'}
+              {!canProcessSales ? 'Clock In to Process Payment' :
+                isCalculatingPromotion ? 'Checking promotions...' : 
+                'Process Payment'}
             </button>
             
-            {hasErrors && (
+            {!canProcessSales && (
+              <p className="text-center text-[10px] text-danger font-500">
+                Please clock in to process sales
+              </p>
+            )}
+            
+            {hasErrors && !canProcessSales && (
               <p className="text-center text-[10px] text-danger font-500">
                 Please fix stock issues before checkout
               </p>
             )}
             
-            {hasAvailablePromotions && !hasPromotion && (
+            {hasAvailablePromotions && !hasPromotion && canProcessSales && (
               <p className="text-center text-[10px] text-primary font-500">
                 Click "Apply" on a promotion above to add it to this sale
               </p>

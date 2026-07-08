@@ -10,7 +10,6 @@ export const ShiftProvider = ({ children }) => {
   const [shiftSales, setShiftSales] = useState(0);
   const [shiftTransactions, setShiftTransactions] = useState(0);
 
-  // Load current shift on mount
   useEffect(() => {
     loadCurrentShift();
   }, []);
@@ -93,7 +92,9 @@ export const ShiftProvider = ({ children }) => {
     await loadCurrentShift();
   }, [loadCurrentShift]);
 
+  // Derived state: Can the user process sales?
   const isClockedIn = currentShift !== null && currentShift.status === 'open';
+  const canProcessSales = isClockedIn;
 
   const value = {
     currentShift,
@@ -101,6 +102,7 @@ export const ShiftProvider = ({ children }) => {
     shiftSales,
     shiftTransactions,
     isClockedIn,
+    canProcessSales,
     clockIn,
     clockOut,
     refreshShift,

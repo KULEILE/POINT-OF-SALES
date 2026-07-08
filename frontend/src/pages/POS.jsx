@@ -13,6 +13,7 @@ import ReturnModal from '../components/returns/ReturnModal';
 import HoldSaleModal from '../components/pos/HoldSaleModal';
 import HeldSalesList from '../components/pos/HeldSalesList';
 import { useCart } from '../context/CartContext';
+import { useShift } from '../context/ShiftContext';
 import { validateCartStock, validateCustomerCredit } from '../utils/validators';
 
 const POS = () => {
@@ -43,6 +44,8 @@ const POS = () => {
     fetchAvailablePromotions
   } = useCart();
 
+  const { canProcessSales, isClockedIn, loading: shiftLoading } = useShift();
+
   const [saleMode, setSaleMode] = useState('cash');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showPayment, setShowPayment] = useState(false);
@@ -56,6 +59,15 @@ const POS = () => {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [showHoldModal, setShowHoldModal] = useState(false);
   const [showHeldSales, setShowHeldSales] = useState(false);
+
+  // Wrapper for addToCart with clock-in check
+  const handleAddToCart = (product, wholesale = false) => {
+    if (!canProcessSales) {
+      toast.error('Please clock in before adding products to cart.');
+      return false;
+    }
+    return addToCart(product, wholesale);
+  };
 
   const handleModeChange = (mode) => {
     setSaleMode(mode);
@@ -79,25 +91,27 @@ const POS = () => {
     setCartCustomer(null);
   };
 
-  // Handle manual promotion application
   const handleApplyPromotion = (promotion, discount) => {
     setPromotion(promotion, discount);
-    // Refresh available promotions after applying
     setTimeout(() => {
       fetchAvailablePromotions();
     }, 100);
   };
 
-  // Handle manual promotion removal
   const handleRemovePromotion = () => {
     clearPromotion();
-    // Refresh available promotions after removing
     setTimeout(() => {
       fetchAvailablePromotions();
     }, 100);
   };
 
   const handleCheckout = () => {
+    // Check if user is clocked in
+    if (!canProcessSales) {
+      toast.error('Please clock in before processing sales.');
+      return;
+    }
+
     const stockValidation = validateCartStock(cart);
     if (stockValidation.hasErrors) {
       toast.error(stockValidation.message);
@@ -212,7 +226,7 @@ const POS = () => {
         tax_exempt: item.tax_exempt || false,
         stock_quantity: item.stock_quantity
       };
-      addToCart(product);
+      handleAddToCart(product);
       if (item.quantity > 1) {
         updateQuantity(product.product_id, item.quantity);
       }
@@ -240,6 +254,11 @@ const POS = () => {
             >
               {isWholesale ? 'Wholesale' : 'Retail'}
             </button>
+            {!canProcessSales && !shiftLoading && (
+              <span className="text-xs text-danger font-600 bg-danger/10 px-2 py-1 rounded-lg">
+                Not Clocked In
+              </span>
+            )}
             {cartErrors.length > 0 && (
               <span className="text-xs text-danger font-600 bg-danger/10 px-2 py-1 rounded-lg">
                 {cartErrors.length} issue{cartErrors.length > 1 ? 's' : ''}
@@ -258,6 +277,13 @@ const POS = () => {
             </button>
           </div>
         </div>
+
+        {!canProcessSales && !shiftLoading && (
+          <div className="bg-danger/10 border border-danger/30 rounded-lg px-4 py-2 flex items-center justify-between">
+            <p className="text-xs text-danger font-600">Please clock in to start selling</p>
+            <span className="text-xs text-text-muted">Click "Clock In" in the header</span>
+          </div>
+        )}
 
         {isWholesale && (
           <div className="bg-primary/10 border border-primary/30 rounded-lg px-4 py-2 flex items-center justify-between">
@@ -281,9 +307,10 @@ const POS = () => {
 
         <div className="flex-1 overflow-hidden">
           <ProductGrid
-            onAddToCart={addToCart}
+            onAddToCart={handleAddToCart}
             refreshTrigger={refreshKey}
             isWholesale={isWholesale}
+            canProcessSales={canProcessSales}
           />
         </div>
       </div>
@@ -312,6 +339,7 @@ const POS = () => {
           cartErrors={cartErrors}
           onApplyPromotion={handleApplyPromotion}
           onRemovePromotion={handleRemovePromotion}
+          canProcessSales={canProcessSales}
         />
       </div>
 
