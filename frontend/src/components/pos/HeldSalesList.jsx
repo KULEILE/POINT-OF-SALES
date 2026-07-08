@@ -16,16 +16,16 @@ const calculateHoldTotal = (cartData) => {
 const HeldSalesList = ({ onSelect, onClose }) => {
   const [holds, setHolds] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [removingId, setRemovingId] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const loadHolds = useCallback(async () => {
     setLoading(true);
     try {
       const response = await holdService.getAll();
-      // Defensive: the API may return { holds: [...] }, { data: [...] },
-      // or occasionally nothing at all if there are no held sales. Never
-      // assume the array is present.
-      const list = response?.holds || response?.data || [];
+      // holdService returns the raw axios response, so the body is under .data.
+      // Defensive: the body's array may be under `holds`, or occasionally
+      // missing entirely if there are none. Never assume it is present.
+      const list = response?.data?.holds || response?.data || [];
       setHolds(Array.isArray(list) ? list : []);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load held sales.');
@@ -45,21 +45,20 @@ const HeldSalesList = ({ onSelect, onClose }) => {
       return;
     }
 
-    setRemovingId(hold.hold_id);
+    setBusyId(hold.hold_id);
     try {
-      // Remove the hold once it's being resumed, so it can't be resumed
-      // twice from two different sessions.
-      await holdService.remove(hold.hold_id);
-      onSelect(hold);
+      const response = await holdService.resume(hold.hold_id);
+      const resumedHold = response?.data?.hold || hold;
+      onSelect(resumedHold);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to resume sale. Please try again.');
     } finally {
-      setRemovingId(null);
+      setBusyId(null);
     }
   };
 
   const handleDelete = async (hold) => {
-    setRemovingId(hold.hold_id);
+    setBusyId(hold.hold_id);
     try {
       await holdService.remove(hold.hold_id);
       setHolds(prev => prev.filter(h => h.hold_id !== hold.hold_id));
@@ -67,7 +66,7 @@ const HeldSalesList = ({ onSelect, onClose }) => {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete held sale.');
     } finally {
-      setRemovingId(null);
+      setBusyId(null);
     }
   };
 
@@ -108,7 +107,7 @@ const HeldSalesList = ({ onSelect, onClose }) => {
                 const items = hold.cart_data || [];
                 const itemCount = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
                 const total = calculateHoldTotal(items);
-                const isRemoving = removingId === hold.hold_id;
+                const isBusy = busyId === hold.hold_id;
 
                 return (
                   <div
@@ -135,17 +134,17 @@ const HeldSalesList = ({ onSelect, onClose }) => {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         onClick={() => handleDelete(hold)}
-                        disabled={isRemoving}
-                        className={`text-xs text-danger hover:underline font-500 px-2 py-1.5 ${isRemoving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={isBusy}
+                        className={`text-xs text-danger hover:underline font-500 px-2 py-1.5 ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         Delete
                       </button>
                       <button
                         onClick={() => handleResume(hold)}
-                        disabled={isRemoving}
-                        className={`k-btn-primary text-xs px-3 py-1.5 ${isRemoving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={isBusy}
+                        className={`k-btn-primary text-xs px-3 py-1.5 ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                        {isRemoving ? 'Resuming...' : 'Resume'}
+                        {isBusy ? 'Resuming...' : 'Resume'}
                       </button>
                     </div>
                   </div>
