@@ -42,8 +42,9 @@ const PaymentModal = ({
   const isCreditSale = saleMode === 'credit';
   const isLaybySale = saleMode === 'layby';
 
+  // FIX 1: Round change to avoid floating point issues
   const change = isCashSale && method === 'cash' && paid
-    ? Math.max(0, parseFloat(paid) - total)
+    ? Math.round((parseFloat(paid) - total) * 100) / 100
     : 0;
 
   const depositAmt = parseFloat(deposit) || 0;
@@ -57,8 +58,14 @@ const PaymentModal = ({
 
   const hasPromotion = promotion && discountAmount > 0;
 
+  // FIX 2: Round both values before comparison to avoid floating point issues
   const canSubmit = (() => {
-    if (isCashSale && method === 'cash') return parseFloat(paid) >= total;
+    if (isCashSale && method === 'cash') {
+      const amount = parseFloat(paid) || 0;
+      const roundedAmount = Math.round(amount * 100) / 100;
+      const roundedTotal = Math.round(total * 100) / 100;
+      return roundedAmount >= roundedTotal;
+    }
     if (isCashSale) return true;
     if (isCreditSale) return !!selectedCustomer;
     if (isLaybySale) return !!selectedCustomer && depositAmt > 0 && depositAmt <= total;
@@ -68,7 +75,14 @@ const PaymentModal = ({
   const handleProcess = async () => {
     if (!canSubmit) {
       if (isCashSale && method === 'cash') {
-        toast.error('The amount entered is less than the total. Please enter the full amount.');
+        const amount = parseFloat(paid) || 0;
+        const roundedAmount = Math.round(amount * 100) / 100;
+        const roundedTotal = Math.round(total * 100) / 100;
+        if (roundedAmount < roundedTotal) {
+          toast.error(`Amount entered (${formatCurrency(amount)}) is less than total (${formatCurrency(total)}). Please enter the full amount.`);
+        } else {
+          toast.error('Please enter the full amount to complete the payment.');
+        }
         return;
       }
       if (isLaybySale && depositAmt <= 0) {
@@ -96,7 +110,7 @@ const PaymentModal = ({
         payment_method: isCreditSale ? 'credit' : isLaybySale ? 'layby' : method,
         amount_paid: isCreditSale ? 0
           : isLaybySale ? depositAmt
-          : method === 'cash' ? parseFloat(paid) || total
+          : method === 'cash' ? Math.round((parseFloat(paid) || total) * 100) / 100
           : total,
         customer_id: selectedCustomer?.customer_id || null,
         customer_phone: selectedCustomer?.phone || null,
@@ -105,6 +119,7 @@ const PaymentModal = ({
         duration_days: isCreditSale || isLaybySale ? duration : null,
         is_wholesale: isWholesale || false,
         customer_type: isWholesale ? 'wholesale' : 'retail',
+        promotion_id: promotion?.promotion_id || null,
       };
 
       const res = await saleService.create(payload);
@@ -138,6 +153,7 @@ const PaymentModal = ({
         duration_days: null,
         is_wholesale: isWholesale || false,
         customer_type: isWholesale ? 'wholesale' : 'retail',
+        promotion_id: promotion?.promotion_id || null,
       };
 
       const res = await saleService.create(payload);
@@ -306,7 +322,7 @@ const PaymentModal = ({
 
               <div>
                 <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">
-                  Payment Duration <span className="text-danger">*</span>
+                  Payment Duration <span className="text-danger"></span>
                 </p>
                 <select
                   className="k-input"
@@ -324,7 +340,7 @@ const PaymentModal = ({
 
               <div>
                 <p className="text-xs font-600 text-text-muted uppercase tracking-wider mb-2">
-                  Deposit Amount <span className="text-danger">*</span>
+                  Deposit Amount <span className="text-danger"></span>
                 </p>
                 <input
                   type="number"
