@@ -12,11 +12,21 @@ export const ShiftProvider = ({ children }) => {
   const isMounted = useRef(true);
   const loadingRef = useRef(false);
 
-  // Load current shift on mount only
+  // Load current shift on mount only, and only if a session actually exists.
+  // ShiftProvider is mounted before login (Splash/Welcome/Login screens), so
+  // without this check it would call a protected endpoint with no token,
+  // get a 401, and (depending on the API client's 401 handling) potentially
+  // trigger a reload loop.
   useEffect(() => {
     isMounted.current = true;
-    loadCurrentShift();
-    
+
+    const hasToken = !!localStorage.getItem('kpos_token');
+    if (hasToken) {
+      loadCurrentShift();
+    } else {
+      setLoading(false);
+    }
+
     return () => {
       isMounted.current = false;
     };
@@ -25,15 +35,26 @@ export const ShiftProvider = ({ children }) => {
   const loadCurrentShift = useCallback(async () => {
     // Prevent multiple simultaneous requests
     if (loadingRef.current) return;
-    
+
+    // Guard again here too, since clockIn/refreshShift can call this
+    // directly at any point in the app's lifecycle.
+    const hasToken = !!localStorage.getItem('kpos_token');
+    if (!hasToken) {
+      setCurrentShift(null);
+      setShiftSales(0);
+      setShiftTransactions(0);
+      setLoading(false);
+      return;
+    }
+
     loadingRef.current = true;
     setLoading(true);
-    
+
     try {
       const response = await shiftService.getCurrentShift();
-      
+
       if (!isMounted.current) return;
-      
+
       if (response.success && response.shift) {
         setCurrentShift(response.shift);
         setShiftSales(parseFloat(response.shift.sales_total) || 0);
@@ -62,7 +83,7 @@ export const ShiftProvider = ({ children }) => {
         starting_float: startingFloat,
         notes: notes
       });
-      
+
       if (response.success) {
         setCurrentShift(response.shift);
         setShiftSales(0);
@@ -91,7 +112,7 @@ export const ShiftProvider = ({ children }) => {
         ending_cash: endingCash,
         notes: notes
       });
-      
+
       if (response.success) {
         setCurrentShift(null);
         setShiftSales(0);
