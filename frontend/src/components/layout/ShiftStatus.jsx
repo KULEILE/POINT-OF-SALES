@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useShift } from '../../context/ShiftContext';
 import { formatCurrency } from '../../utils/formatters';
 import ShiftModal from '../shifts/ShiftModal';
@@ -6,7 +6,7 @@ import ShiftModal from '../shifts/ShiftModal';
 const ShiftStatus = () => {
   const { currentShift, isClockedIn, shiftSales, shiftTransactions, loading } = useShift();
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState('clock-in'); // 'clock-in', 'clock-out'
+  const [modalType, setModalType] = useState('clock-in');
 
   const handleClockIn = () => {
     setModalType('clock-in');

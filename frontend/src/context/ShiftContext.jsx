@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { shiftService } from '../services/shiftService';
 import toast from 'react-hot-toast';
 
@@ -9,15 +9,31 @@ export const ShiftProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [shiftSales, setShiftSales] = useState(0);
   const [shiftTransactions, setShiftTransactions] = useState(0);
+  const isMounted = useRef(true);
+  const loadingRef = useRef(false);
 
+  // Load current shift on mount only
   useEffect(() => {
+    isMounted.current = true;
     loadCurrentShift();
+    
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   const loadCurrentShift = useCallback(async () => {
+    // Prevent multiple simultaneous requests
+    if (loadingRef.current) return;
+    
+    loadingRef.current = true;
     setLoading(true);
+    
     try {
       const response = await shiftService.getCurrentShift();
+      
+      if (!isMounted.current) return;
+      
       if (response.success && response.shift) {
         setCurrentShift(response.shift);
         setShiftSales(parseFloat(response.shift.sales_total) || 0);
@@ -29,9 +45,14 @@ export const ShiftProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('[ShiftContext] loadCurrentShift error:', error);
-      setCurrentShift(null);
+      if (isMounted.current) {
+        setCurrentShift(null);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
+      loadingRef.current = false;
     }
   }, []);
 
@@ -92,7 +113,6 @@ export const ShiftProvider = ({ children }) => {
     await loadCurrentShift();
   }, [loadCurrentShift]);
 
-  // Derived state: Can the user process sales?
   const isClockedIn = currentShift !== null && currentShift.status === 'open';
   const canProcessSales = isClockedIn;
 
