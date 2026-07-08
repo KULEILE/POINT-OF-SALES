@@ -1,12 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useShift } from '../../context/ShiftContext';
 import { formatCurrency } from '../../utils/formatters';
 import ShiftModal from '../shifts/ShiftModal';
 
 const ShiftStatus = () => {
-  const { currentShift, isClockedIn, shiftSales, shiftTransactions, loading } = useShift();
+  const { currentShift, isClockedIn, shiftSales, shiftTransactions, loading, refreshShift } = useShift();
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('clock-in');
+  const intervalRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  // Set up periodic refresh every 30 seconds
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // Initial refresh only if not loading and no shift data
+    if (!loading && !currentShift) {
+      refreshShift();
+    }
+
+    // Set up interval to refresh every 30 seconds
+    intervalRef.current = setInterval(() => {
+      if (isMountedRef.current) {
+        refreshShift();
+      }
+    }, 30000); // 30 seconds
+
+    // Cleanup on unmount
+    return () => {
+      isMountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   const handleClockIn = () => {
     setModalType('clock-in');
@@ -16,6 +43,12 @@ const ShiftStatus = () => {
   const handleClockOut = () => {
     setModalType('clock-out');
     setShowModal(true);
+  };
+
+  const handleModalSuccess = () => {
+    setShowModal(false);
+    // Refresh immediately after clock in/out
+    refreshShift();
   };
 
   if (loading) {
@@ -59,9 +92,7 @@ const ShiftStatus = () => {
         <ShiftModal
           type={modalType}
           onClose={() => setShowModal(false)}
-          onSuccess={() => {
-            setShowModal(false);
-          }}
+          onSuccess={handleModalSuccess}
         />
       )}
     </>
