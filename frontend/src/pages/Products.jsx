@@ -29,7 +29,11 @@ const Products = () => {
     stock_quantity: 0,
     stock_unit: 'piece',
     expiry_date: '',
-    location: 'Main Store'
+    location: 'Main Store',
+    // Auto-filled fields (hidden from user)
+    variant_group: '',
+    variant_name: '',
+    variant_value: ''
   });
 
   const load = () => {
@@ -79,7 +83,10 @@ const Products = () => {
       stock_quantity: 0,
       stock_unit: 'piece',
       expiry_date: '',
-      location: 'Main Store'
+      location: 'Main Store',
+      variant_group: '',
+      variant_name: '',
+      variant_value: ''
     });
     setShowModal(true);
   };
@@ -95,7 +102,7 @@ const Products = () => {
       category_id: p.category_id || '',
       brand: p.brand || '',
       cost_price: p.cost_price || '',
-      retail_price: p.selling_price || '',  // Map selling_price to retail_price
+      retail_price: p.selling_price || '',
       wholesale_price: p.wholesale_price || '',
       tax_rate: p.tax_rate || 15,
       tax_exempt: p.tax_exempt || false,
@@ -104,17 +111,20 @@ const Products = () => {
       stock_quantity: p.stock_quantity || 0,
       stock_unit: p.stock_unit || 'piece',
       expiry_date: p.expiry_date ? p.expiry_date.split('T')[0] : '',
-      location: p.location || 'Main Store'
+      location: p.location || 'Main Store',
+      variant_group: p.variant_group || p.name || '',
+      variant_name: p.variant_name || p.size || '',
+      variant_value: p.variant_value || p.cost_price || ''
     });
     setShowModal(true);
   };
 
-  // Auto-fill handlers
+  // AUTO-FILL HANDLERS
   const handleNameChange = (value) => {
     setForm({
       ...form,
       name: value,
-      variant_group: value // Auto from name
+      variant_group: value // Auto-fill variant_group from name
     });
   };
 
@@ -122,7 +132,7 @@ const Products = () => {
     setForm({
       ...form,
       size: value,
-      variant_name: value // Auto from size
+      variant_name: value // Auto-fill variant_name from size
     });
   };
 
@@ -130,12 +140,11 @@ const Products = () => {
     setForm({
       ...form,
       cost_price: value,
-      variant_value: value // Auto from cost price
+      variant_value: value // Auto-fill variant_value from cost price
     });
   };
 
   const handleSave = async () => {
-    // Validate required fields
     if (!form.name || !form.sku || !form.retail_price) {
       toast.error('Product Name, SKU, and Retail Price are required.');
       return;
@@ -151,7 +160,7 @@ const Products = () => {
         category_id: form.category_id || null,
         brand: form.brand || null,
         cost_price: parseFloat(form.cost_price) || 0,
-        selling_price: parseFloat(form.retail_price) || 0,  // Map retail_price to selling_price
+        selling_price: parseFloat(form.retail_price) || 0,
         wholesale_price: form.wholesale_price ? parseFloat(form.wholesale_price) : null,
         tax_rate: parseFloat(form.tax_rate) || 15,
         tax_exempt: form.tax_exempt || false,
@@ -161,13 +170,12 @@ const Products = () => {
         expiry_date: form.expiry_date || null,
         location: form.location || 'Main Store',
         status: 'active',
-        // Auto-filled fields
-        variant_group: form.name, // Auto from name
-        variant_name: form.size || null, // Auto from size
-        variant_value: parseFloat(form.cost_price) || 0 // Auto from cost price
+        // AUTO-FILLED FIELDS (from user input)
+        variant_group: form.variant_group || form.name, // Auto from name
+        variant_name: form.variant_name || form.size || null, // Auto from size
+        variant_value: parseFloat(form.variant_value) || parseFloat(form.cost_price) || 0 // Auto from cost
       };
 
-      // Remove undefined values
       Object.keys(payload).forEach(key => {
         if (payload[key] === undefined) {
           delete payload[key];
@@ -330,7 +338,7 @@ const Products = () => {
                   value={form.name}
                   onChange={e => handleNameChange(e.target.value)}
                 />
-                <p className="text-xs text-text-faint mt-1">Used as variant group for grouping products</p>
+                <p className="text-xs text-text-faint mt-1">→ Auto-fills variant group</p>
               </div>
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
@@ -355,7 +363,7 @@ const Products = () => {
                   value={form.size}
                   onChange={e => handleSizeChange(e.target.value)}
                 />
-                <p className="text-xs text-text-faint mt-1">Auto-fills variant name</p>
+                <p className="text-xs text-text-faint mt-1">→ Auto-fills variant name</p>
               </div>
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
@@ -430,7 +438,7 @@ const Products = () => {
                   min="0"
                   step="0.01"
                 />
-                <p className="text-xs text-text-faint mt-1">Auto-fills variant value for sorting</p>
+                <p className="text-xs text-text-faint mt-1">→ Auto-fills variant value</p>
               </div>
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
@@ -569,6 +577,14 @@ const Products = () => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Auto-Fill Summary (Hidden from user) */}
+          <div className="hidden">
+            <p>Auto-fill fields (not shown to user):</p>
+            <p>variant_group: {form.variant_group}</p>
+            <p>variant_name: {form.variant_name}</p>
+            <p>variant_value: {form.variant_value}</p>
           </div>
         </div>
 
