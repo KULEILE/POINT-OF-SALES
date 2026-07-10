@@ -46,7 +46,15 @@ const Products = () => {
             if (a.variant_group !== b.variant_group) {
               return a.variant_group.localeCompare(b.variant_group);
             }
-            return (a.variant_value || 0) - (b.variant_value || 0);
+            // Same group — order variants by size (e.g. "500g" before "1kg"),
+            // NOT by variant_value, which holds cost_price in this schema.
+            // `numeric: true` makes localeCompare treat embedded digits as
+            // numbers so "2kg" correctly sorts after "500g" and before "10kg".
+            return (a.size || a.variant_name || '').localeCompare(
+              b.size || b.variant_name || '',
+              undefined,
+              { numeric: true, sensitivity: 'base' }
+            );
           }
           return a.name.localeCompare(b.name);
         });
