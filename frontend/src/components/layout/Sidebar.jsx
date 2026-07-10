@@ -6,7 +6,7 @@ import logo from '../../assets/logo.png';
 const allNav = [
   { key: 'dashboard', label: 'Dashboard', roles: ['admin', 'manager'] },
   { key: 'pos', label: 'Point of Sale', roles: ['admin', 'manager', 'cashier'] },
-  { key: 'products', label: 'Products', roles: ['admin', 'manager', 'cashier'] },
+  { key: 'products', label: 'Products', roles: ['admin', 'manager'] },  // REMOVED cashier
   { key: 'inventory', label: 'Inventory', roles: ['admin', 'manager'] },
   { key: 'customers', label: 'Customers', roles: ['admin', 'manager', 'cashier'] },
   { key: 'suppliers', label: 'Suppliers', roles: ['admin', 'manager'] },
