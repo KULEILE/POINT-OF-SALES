@@ -9,10 +9,13 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
   
   const isExpired = product.expiry_date && new Date(product.expiry_date) <= new Date();
 
-  // Determine which price to show and use for adding to cart
+  // Determine which price to show
   const displayPrice = isWholesale && product.wholesale_price && product.wholesale_price > 0
     ? product.wholesale_price 
     : product.selling_price;
+
+  // Get variant display name (size)
+  const variantDisplay = product.size || product.variant_name || product.local_name || '';
 
   const handleAdd = (e) => {
     e.stopPropagation();
@@ -23,7 +26,7 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
     }
 
     if (isExpired) {
-      toast.error(`"${product.name}" has expired on ${new Date(product.expiry_date).toLocaleDateString()}. Cannot sell this product.`);
+      toast.error(`"${product.name}" has expired on ${new Date(product.expiry_date).toLocaleDateString()}.`);
       return;
     }
 
@@ -39,7 +42,6 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
       return;
     }
 
-    // Pass the product with the appropriate price
     const productToAdd = {
       ...product,
       unit_price: displayPrice,
@@ -79,26 +81,55 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
       disabled={isDisabled}
       className={`bg-surface-card border rounded-xl p-3 text-left transition-all w-full ${cardStyle}`}
     >
+      {/* Category Badge */}
       {product.category_name && (
-        <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">{product.category_name}</span>
+        <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+          {product.category_name}
+        </span>
       )}
-      {isWholesale && product.wholesale_price && product.wholesale_price > 0 && (
-        <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full ml-1">Wholesale</span>
-      )}
-      <p className="text-sm font-600 text-text-primary mt-2 leading-tight line-clamp-2">{product.name}</p>
-      {product.local_name && <p className="text-xs text-text-muted mt-0.5">{product.local_name}</p>}
       
+      {/* Wholesale Badge */}
+      {isWholesale && product.wholesale_price && product.wholesale_price > 0 && (
+        <span className="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded-full ml-1">
+          Wholesale
+        </span>
+      )}
+      
+      {/* Product Name */}
+      <p className="text-sm font-600 text-text-primary mt-2 leading-tight line-clamp-2">
+        {product.name}
+      </p>
+      
+      {/* Local Name */}
+      {product.local_name && (
+        <p className="text-xs text-text-muted mt-0.5">{product.local_name}</p>
+      )}
+      
+      {/* VARIANT NAME - SIZE (CRITICAL FIX) */}
+      {variantDisplay && (
+        <p className="text-xs font-500 text-text-faint mt-0.5">
+          {variantDisplay}
+        </p>
+      )}
+      
+      {/* SKU (when searching) */}
       {showSku && product.sku && (
         <p className="text-xs text-text-faint font-mono mt-0.5">SKU: {product.sku}</p>
       )}
       
+      {/* Price */}
       <div className="flex items-center gap-2 mt-2">
-        <p className="text-primary font-700 text-base">{formatCurrency(displayPrice)}</p>
+        <p className="text-primary font-700 text-base">
+          {formatCurrency(displayPrice)}
+        </p>
         {isWholesale && product.wholesale_price && product.wholesale_price > 0 && product.wholesale_price < product.selling_price && (
-          <p className="text-xs text-text-muted line-through">{formatCurrency(product.selling_price)}</p>
+          <p className="text-xs text-text-muted line-through">
+            {formatCurrency(product.selling_price)}
+          </p>
         )}
       </div>
       
+      {/* Status */}
       <div className="flex items-center justify-between mt-1.5">
         <span className={`text-xs font-500 ${statusColor}`}>
           {statusText}
@@ -106,11 +137,14 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
         {!isDisabled && <span className="text-primary text-lg font-300">+</span>}
       </div>
       
+      {/* Expired Warning */}
       {isExpired && (
         <div className="mt-1 text-[10px] text-danger font-500">
           Expired: {new Date(product.expiry_date).toLocaleDateString()}
         </div>
       )}
+      
+      {/* Clock-in Warning */}
       {!canProcessSales && (
         <div className="mt-1 text-[10px] text-text-faint font-500">
           Clock in to add products
