@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { formatCurrency } from '../../utils/formatters';
 import { validateProductStock } from '../../utils/validators';
 
-const ProductCard = ({ product, onAdd, isWholesale }) => {
+const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, showSku = false }) => {
   const outOfStock = product.stock_quantity <= 0;
   const lowStock = product.stock_quantity <= (product.min_stock || 5) && !outOfStock;
   
@@ -14,7 +14,14 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
     ? product.wholesale_price 
     : product.selling_price;
 
-  const handleAdd = () => {
+  const handleAdd = (e) => {
+    e.stopPropagation();
+    
+    if (!canProcessSales) {
+      toast.error('Please clock in before adding products.');
+      return;
+    }
+
     if (isExpired) {
       toast.error(`"${product.name}" has expired on ${new Date(product.expiry_date).toLocaleDateString()}. Cannot sell this product.`);
       return;
@@ -36,7 +43,7 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
     const productToAdd = {
       ...product,
       unit_price: displayPrice,
-      selling_price: displayPrice // Override for cart calculations
+      selling_price: displayPrice
     };
     onAdd(productToAdd);
   };
@@ -44,15 +51,23 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
   let cardStyle = 'border-surface-border hover:border-primary cursor-pointer active:scale-95';
   let statusText = `Qty: ${product.stock_quantity}`;
   let statusColor = 'text-text-faint';
+  let isDisabled = false;
 
-  if (isExpired) {
+  if (!canProcessSales) {
+    cardStyle = 'border-surface-border opacity-50 cursor-not-allowed';
+    statusText = 'Clock in to add';
+    statusColor = 'text-text-faint';
+    isDisabled = true;
+  } else if (isExpired) {
     cardStyle = 'border-danger opacity-60 cursor-not-allowed';
     statusText = 'Expired';
     statusColor = 'text-danger';
+    isDisabled = true;
   } else if (outOfStock) {
     cardStyle = 'border-surface-border opacity-50 cursor-not-allowed';
     statusText = 'Out of stock';
     statusColor = 'text-danger';
+    isDisabled = true;
   } else if (lowStock) {
     statusText = `Low: ${product.stock_quantity}`;
     statusColor = 'text-warning';
@@ -61,7 +76,7 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
   return (
     <button
       onClick={handleAdd}
-      disabled={outOfStock || isExpired}
+      disabled={isDisabled}
       className={`bg-surface-card border rounded-xl p-3 text-left transition-all w-full ${cardStyle}`}
     >
       {product.category_name && (
@@ -72,21 +87,33 @@ const ProductCard = ({ product, onAdd, isWholesale }) => {
       )}
       <p className="text-sm font-600 text-text-primary mt-2 leading-tight line-clamp-2">{product.name}</p>
       {product.local_name && <p className="text-xs text-text-muted mt-0.5">{product.local_name}</p>}
+      
+      {showSku && product.sku && (
+        <p className="text-xs text-text-faint font-mono mt-0.5">SKU: {product.sku}</p>
+      )}
+      
       <div className="flex items-center gap-2 mt-2">
         <p className="text-primary font-700 text-base">{formatCurrency(displayPrice)}</p>
         {isWholesale && product.wholesale_price && product.wholesale_price > 0 && product.wholesale_price < product.selling_price && (
           <p className="text-xs text-text-muted line-through">{formatCurrency(product.selling_price)}</p>
         )}
       </div>
+      
       <div className="flex items-center justify-between mt-1.5">
         <span className={`text-xs font-500 ${statusColor}`}>
           {statusText}
         </span>
-        {!outOfStock && !isExpired && <span className="text-primary text-lg font-300">+</span>}
+        {!isDisabled && <span className="text-primary text-lg font-300">+</span>}
       </div>
+      
       {isExpired && (
         <div className="mt-1 text-[10px] text-danger font-500">
           Expired: {new Date(product.expiry_date).toLocaleDateString()}
+        </div>
+      )}
+      {!canProcessSales && (
+        <div className="mt-1 text-[10px] text-text-faint font-500">
+          Clock in to add products
         </div>
       )}
     </button>
