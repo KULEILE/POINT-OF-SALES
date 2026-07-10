@@ -124,7 +124,7 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
 
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Ending Cash <span className="text-danger">*</span>
+                  Ending Cash
                 </label>
                 <input
                   type="number"
@@ -134,7 +134,6 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
                   onChange={(e) => handleEndingCashChange(e.target.value)}
                   min="0"
                   step="0.01"
-                  required
                 />
                 {errors.endingCash && (
                   <p className="text-xs text-danger mt-1.5 font-500">
