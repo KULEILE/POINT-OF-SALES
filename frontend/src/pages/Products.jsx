@@ -14,6 +14,7 @@ const Products = () => {
   const [form, setForm] = useState({
     name: '',
     local_name: '',
+    description: '', // ADDED
     size: '',
     sku: '',
     barcode: '',
@@ -76,6 +77,7 @@ const Products = () => {
     setForm({
       name: '',
       local_name: '',
+      description: '', // ADDED
       size: '',
       sku: '',
       barcode: '',
@@ -104,6 +106,7 @@ const Products = () => {
     setForm({
       name: p.name || '',
       local_name: p.local_name || '',
+      description: p.description || '', // ADDED
       size: p.size || p.variant_name || '',
       sku: p.sku || '',
       barcode: p.barcode || '',
@@ -162,6 +165,7 @@ const Products = () => {
       const payload = {
         name: form.name,
         local_name: form.local_name || null,
+        description: form.description || null, // ADDED
         size: form.size || null,
         sku: form.sku,
         barcode: form.barcode || null,
@@ -360,6 +364,21 @@ const Products = () => {
                   onChange={e => setForm({...form, local_name: e.target.value})}
                 />
               </div>
+
+              {/* ADDED: Description field, spans full width */}
+              <div className="col-span-2">
+                <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  className="k-input"
+                  rows={3}
+                  placeholder="Optional product description"
+                  value={form.description}
+                  onChange={e => setForm({...form, description: e.target.value})}
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
                   Size / Variant
