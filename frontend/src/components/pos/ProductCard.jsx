@@ -17,6 +17,10 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
   // Get variant display name (size)
   const variantDisplay = product.size || product.variant_name || product.local_name || '';
 
+  // Get description (truncated if too long)
+  const description = product.description || '';
+  const truncatedDescription = description.length > 60 ? description.substring(0, 60) + '...' : description;
+
   const handleAdd = (e) => {
     e.stopPropagation();
     
@@ -105,10 +109,17 @@ const ProductCard = ({ product, onAdd, isWholesale, canProcessSales = true, show
         <p className="text-xs text-text-muted mt-0.5">{product.local_name}</p>
       )}
       
-      {/* VARIANT NAME - SIZE (CRITICAL FIX) */}
+      {/* VARIANT NAME - SIZE */}
       {variantDisplay && (
         <p className="text-xs font-500 text-text-faint mt-0.5">
           {variantDisplay}
+        </p>
+      )}
+      
+      {/* DESCRIPTION - Helps identify products */}
+      {truncatedDescription && (
+        <p className="text-xs text-text-muted mt-0.5 italic">
+          {truncatedDescription}
         </p>
       )}
       
