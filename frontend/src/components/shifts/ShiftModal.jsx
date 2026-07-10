@@ -9,6 +9,7 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
   const [endingCash, setEndingCash] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const isClockIn = type === 'clock-in';
   const isClockOut = type === 'clock-out';
@@ -18,8 +19,29 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
   const salesTotal = parseFloat(shiftSales) || 0;
   const expectedCash = startingFloatAmount + salesTotal;
 
+  const validateClockOut = () => {
+    const newErrors = {};
+    
+    if (!endingCash || endingCash.trim() === '') {
+      newErrors.endingCash = 'Ending cash is required. Please enter the actual cash count.';
+    } else if (parseFloat(endingCash) < 0) {
+      newErrors.endingCash = 'Ending cash cannot be negative.';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (isClockOut) {
+      const isValid = validateClockOut();
+      if (!isValid) {
+        return;
+      }
+    }
+
     setLoading(true);
 
     let result;
@@ -35,6 +57,13 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
 
     if (result.success) {
       if (onSuccess) onSuccess();
+    }
+  };
+
+  const handleEndingCashChange = (value) => {
+    setEndingCash(value);
+    if (errors.endingCash) {
+      setErrors({ ...errors, endingCash: '' });
     }
   };
 
@@ -95,17 +124,23 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
 
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Ending Cash
+                  Ending Cash <span className="text-danger">*</span>
                 </label>
                 <input
                   type="number"
-                  className="k-input"
+                  className={`k-input ${errors.endingCash ? 'border-danger focus:border-danger' : ''}`}
                   placeholder="Enter actual cash count"
                   value={endingCash}
-                  onChange={(e) => setEndingCash(e.target.value)}
+                  onChange={(e) => handleEndingCashChange(e.target.value)}
                   min="0"
                   step="0.01"
+                  required
                 />
+                {errors.endingCash && (
+                  <p className="text-xs text-danger mt-1.5 font-500">
+                    {errors.endingCash}
+                  </p>
+                )}
                 <p className="text-xs text-text-faint mt-1">
                   Actual cash counted in the register at end of shift
                 </p>
