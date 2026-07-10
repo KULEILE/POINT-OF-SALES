@@ -13,6 +13,11 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
   const isClockIn = type === 'clock-in';
   const isClockOut = type === 'clock-out';
 
+  // Calculate expected cash correctly
+  const startingFloatAmount = parseFloat(currentShift?.starting_float) || 0;
+  const salesTotal = parseFloat(shiftSales) || 0;
+  const expectedCash = startingFloatAmount + salesTotal;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -72,7 +77,7 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
               <div className="bg-surface-bg border border-surface-border rounded-xl p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Sales Total</span>
-                  <span className="font-600 text-primary">{formatCurrency(shiftSales)}</span>
+                  <span className="font-600 text-primary">{formatCurrency(salesTotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Transactions</span>
@@ -80,19 +85,17 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
                 </div>
                 <div className="flex justify-between text-sm border-t border-surface-border pt-2">
                   <span className="text-text-muted">Starting Float</span>
-                  <span className="font-600">{formatCurrency(currentShift?.starting_float || 0)}</span>
+                  <span className="font-600">{formatCurrency(startingFloatAmount)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">Expected Cash</span>
-                  <span className="font-600">
-                    {formatCurrency((currentShift?.starting_float || 0) + shiftSales)}
-                  </span>
+                <div className="flex justify-between text-sm border-t border-surface-border pt-2">
+                  <span className="text-text-muted font-600">Expected Cash</span>
+                  <span className="font-700 text-primary text-base">{formatCurrency(expectedCash)}</span>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Ending Cash <span className="text-danger">*</span>
+                  Ending Cash
                 </label>
                 <input
                   type="number"
@@ -100,7 +103,6 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
                   placeholder="Enter actual cash count"
                   value={endingCash}
                   onChange={(e) => setEndingCash(e.target.value)}
-                  required
                   min="0"
                   step="0.01"
                 />
