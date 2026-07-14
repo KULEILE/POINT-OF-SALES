@@ -67,7 +67,7 @@ const Users = () => {
             <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Username </label><input type="text" className="k-input" value={form.username} onChange={e => setForm({...form,username:e.target.value})} disabled={!!editUser} /></div>
             <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Email</label><input type="email" className="k-input" value={form.email} onChange={e => setForm({...form,email:e.target.value})} /></div>
             <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Phone</label><input type="tel" className="k-input" value={form.phone} onChange={e => setForm({...form,phone:e.target.value})} /></div>
-            {!editUser && <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Password *</label><input type="password" className="k-input" value={form.password} onChange={e => setForm({...form,password:e.target.value})} /></div>}
+            {!editUser && <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Password </label><input type="password" className="k-input" value={form.password} onChange={e => setForm({...form,password:e.target.value})} /></div>}
             <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Role </label>
               <select className="k-input" value={form.role} onChange={e => setForm({...form,role:e.target.value})}>
                 <option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="auditor">Auditor</option>

@@ -238,7 +238,7 @@ const Customers = () => {
               <input
                 type="tel"
                 className="k-input"
-                placeholder="+266 5000 0000"
+                placeholder="+266 59508861"
                 value={form.phone}
                 onChange={e => setForm({ ...form, phone: e.target.value })}
               />
