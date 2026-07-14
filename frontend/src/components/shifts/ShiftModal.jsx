@@ -181,7 +181,7 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
 
           <div>
             <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-              Notes {hasDifference && <span className="text-danger">*</span>}
+              Notes {hasDifference && <span className="text-danger"></span>}
             </label>
             <input
               type="text"

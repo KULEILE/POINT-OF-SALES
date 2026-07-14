@@ -63,12 +63,12 @@ const Users = () => {
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editUser ? 'Edit User' : 'Add User'}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Full Name *</label><input type="text" className="k-input" value={form.full_name} onChange={e => setForm({...form,full_name:e.target.value})} /></div>
-            <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Username *</label><input type="text" className="k-input" value={form.username} onChange={e => setForm({...form,username:e.target.value})} disabled={!!editUser} /></div>
+            <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Full Name </label><input type="text" className="k-input" value={form.full_name} onChange={e => setForm({...form,full_name:e.target.value})} /></div>
+            <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Username </label><input type="text" className="k-input" value={form.username} onChange={e => setForm({...form,username:e.target.value})} disabled={!!editUser} /></div>
             <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Email</label><input type="email" className="k-input" value={form.email} onChange={e => setForm({...form,email:e.target.value})} /></div>
             <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Phone</label><input type="tel" className="k-input" value={form.phone} onChange={e => setForm({...form,phone:e.target.value})} /></div>
             {!editUser && <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Password *</label><input type="password" className="k-input" value={form.password} onChange={e => setForm({...form,password:e.target.value})} /></div>}
-            <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Role *</label>
+            <div><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">Role </label>
               <select className="k-input" value={form.role} onChange={e => setForm({...form,role:e.target.value})}>
                 <option value="admin">Admin</option><option value="manager">Manager</option><option value="cashier">Cashier</option><option value="auditor">Auditor</option>
               </select>

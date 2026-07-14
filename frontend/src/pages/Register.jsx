@@ -81,7 +81,7 @@ const Register = ({ onBack, onSuccess }) => {
             ))}
           </div>
         </div>
-        <p className="text-xs text-text-faint">© 2025 K-POINT OF SALES · Maseru, Lesotho</p>
+        <p className="text-xs text-text-faint">© 2026 K-POINT OF SALES · Maseru, Lesotho</p>
       </div>
 
       {/* Right panel — form */}
@@ -110,7 +110,7 @@ const Register = ({ onBack, onSuccess }) => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Full name *
+                  Full name 
                 </label>
                 <input
                   type="text"
@@ -123,7 +123,7 @@ const Register = ({ onBack, onSuccess }) => {
               </div>
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Username *
+                  Username 
                 </label>
                 <input
                   type="text"
@@ -167,7 +167,7 @@ const Register = ({ onBack, onSuccess }) => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Password *
+                  Password 
                 </label>
                 <div className="relative">
                   <input
@@ -188,7 +188,7 @@ const Register = ({ onBack, onSuccess }) => {
               </div>
               <div>
                 <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-                  Role *
+                  Role 
                 </label>
                 <select
                   className="k-input"

@@ -56,7 +56,7 @@ const Suppliers = () => {
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editSup ? 'Edit Supplier' : 'Add Supplier'}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            {[['name','Company Name *','text'],['contact_name','Contact Person','text'],['phone','Phone','tel'],['email','Email','email'],['payment_terms','Payment Terms (days)','number']].map(([k,l,t]) => (
+            {[['name','Company Name ','text'],['contact_name','Contact Person','text'],['phone','Phone','tel'],['email','Email','email'],['payment_terms','Payment Terms (days)','number']].map(([k,l,t]) => (
               <div key={k}><label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">{l}</label><input type={t} className="k-input" value={form[k]} onChange={e => setForm({...form,[k]:e.target.value})} /></div>
             ))}
           </div>
