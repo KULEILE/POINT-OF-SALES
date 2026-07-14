@@ -19,13 +19,24 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
   const salesTotal = parseFloat(shiftSales) || 0;
   const expectedCash = startingFloatAmount + salesTotal;
 
+  // Calculate difference
+  const actualCash = parseFloat(endingCash) || 0;
+  const difference = actualCash - expectedCash;
+  const hasDifference = difference !== 0;
+
   const validateClockOut = () => {
     const newErrors = {};
     
+    // Validate ending cash
     if (!endingCash || endingCash.trim() === '') {
       newErrors.endingCash = 'Ending cash is required. Please enter the actual cash count.';
     } else if (parseFloat(endingCash) < 0) {
       newErrors.endingCash = 'Ending cash cannot be negative.';
+    }
+    
+    // If there's a cash difference, notes are required
+    if (hasDifference && (!notes || notes.trim() === '')) {
+      newErrors.notes = `Please explain why there is a ${difference > 0 ? 'surplus' : 'shortage'} of ${formatCurrency(Math.abs(difference))}.`;
     }
     
     setErrors(newErrors);
@@ -64,6 +75,16 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
     setEndingCash(value);
     if (errors.endingCash) {
       setErrors({ ...errors, endingCash: '' });
+    }
+    if (errors.notes) {
+      setErrors({ ...errors, notes: '' });
+    }
+  };
+
+  const handleNotesChange = (value) => {
+    setNotes(value);
+    if (errors.notes) {
+      setErrors({ ...errors, notes: '' });
     }
   };
 
@@ -144,20 +165,47 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
                   Actual cash counted in the register at end of shift
                 </p>
               </div>
+
+              {/* Difference Warning */}
+              {hasDifference && !errors.endingCash && (
+                <div className={`p-3 rounded-lg border ${difference > 0 ? 'bg-success/10 border-success/30' : 'bg-danger/10 border-danger/30'}`}>
+                  <p className={`text-sm font-600 ${difference > 0 ? 'text-success' : 'text-danger'}`}>
+                    {difference > 0 ? 'Over' : 'Short'} by {formatCurrency(Math.abs(difference))}
+                  </p>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    Please explain the reason in the notes below.
+                  </p>
+                </div>
+              )}
             </>
           )}
 
           <div>
             <label className="block text-xs font-500 text-text-muted uppercase tracking-wider mb-1.5">
-              Notes
+              Notes {hasDifference && <span className="text-danger">*</span>}
             </label>
             <input
               type="text"
-              className="k-input"
-              placeholder="Optional notes"
+              className={`k-input ${errors.notes ? 'border-danger focus:border-danger' : ''}`}
+              placeholder={hasDifference ? 'Explanation required for cash difference' : 'Optional notes'}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => handleNotesChange(e.target.value)}
             />
+            {errors.notes && (
+              <p className="text-xs text-danger mt-1.5 font-500">
+                {errors.notes}
+              </p>
+            )}
+            {!errors.notes && hasDifference && (
+              <p className="text-xs text-text-faint mt-1">
+                Please explain why there is a {difference > 0 ? 'surplus' : 'shortage'} of {formatCurrency(Math.abs(difference))}
+              </p>
+            )}
+            {!hasDifference && (
+              <p className="text-xs text-text-faint mt-1">
+                Optional notes
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2 pt-2 border-t border-surface-border">
