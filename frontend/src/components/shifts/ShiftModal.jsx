@@ -19,22 +19,21 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
   const salesTotal = parseFloat(shiftSales) || 0;
   const expectedCash = startingFloatAmount + salesTotal;
 
-  // Calculate difference
+  // Calculate difference ONLY when user has entered ending cash
   const actualCash = parseFloat(endingCash) || 0;
-  const difference = actualCash - expectedCash;
-  const hasDifference = difference !== 0;
+  const hasEndingCash = endingCash !== null && endingCash !== undefined && endingCash.trim() !== '';
+  const difference = hasEndingCash ? actualCash - expectedCash : 0;
+  const hasDifference = hasEndingCash && difference !== 0;
 
   const validateClockOut = () => {
     const newErrors = {};
     
-    // Validate ending cash
     if (!endingCash || endingCash.trim() === '') {
       newErrors.endingCash = 'Ending cash is required. Please enter the actual cash count.';
     } else if (parseFloat(endingCash) < 0) {
       newErrors.endingCash = 'Ending cash cannot be negative.';
     }
     
-    // If there's a cash difference, notes are required
     if (hasDifference && (!notes || notes.trim() === '')) {
       newErrors.notes = `Please explain why there is a ${difference > 0 ? 'surplus' : 'shortage'} of ${formatCurrency(Math.abs(difference))}.`;
     }
@@ -166,7 +165,7 @@ const ShiftModal = ({ type, onClose, onSuccess }) => {
                 </p>
               </div>
 
-              {/* Difference Warning */}
+              {/* Difference Warning - Only shows when user has entered cash */}
               {hasDifference && !errors.endingCash && (
                 <div className={`p-3 rounded-lg border ${difference > 0 ? 'bg-success/10 border-success/30' : 'bg-danger/10 border-danger/30'}`}>
                   <p className={`text-sm font-600 ${difference > 0 ? 'text-success' : 'text-danger'}`}>
