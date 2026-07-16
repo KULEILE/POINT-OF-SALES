@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { productService } from '../../services/productService';
 import ProductCard from './ProductCard';
 import GroupedProductCard from './GroupedProductCard';
@@ -24,20 +24,10 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
   // Load products
   useEffect(() => {
     setLoading(true);
-    productService.getAll({ search, category_id: activecat, limit: 120 })
+    productService.getAll({ search, category_id: activecat, limit: 200 })
       .then(r => {
         const productData = r.data.products || [];
         setProducts(productData);
-        
-        // Auto-select first product if only one result and searching by name
-        if (search && productData.length === 1 && !barcode) {
-          const singleProduct = productData[0];
-          // If product has variants, show them
-          const hasVariants = products.filter(p => p.name === singleProduct.name).length > 1;
-          if (!hasVariants) {
-            handleProductAdd(singleProduct);
-          }
-        }
       })
       .catch(() => toast.error('Failed to load products'))
       .finally(() => setLoading(false));
@@ -55,24 +45,25 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
     }
   }, [search]);
 
-  // Group products by name
+  // Group products by name (only when not searching)
   const groupedProducts = useMemo(() => {
+    if (isSearching) return {};
+    
     const groups = {};
     const filtered = products.filter(p => {
-      // Don't show expired products in the main grid
       const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
-      return !isExpired;
+      return !isExpired && p.status !== 'inactive';
     });
     
     filtered.forEach(p => {
-      const key = p.name;
+      const key = p.variant_group || p.name;
       if (!groups[key]) {
         groups[key] = [];
       }
       groups[key].push(p);
     });
     return groups;
-  }, [products]);
+  }, [products, isSearching]);
 
   // Get display products based on current state
   const getDisplayProducts = useMemo(() => {
@@ -80,7 +71,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
     if (isSearching) {
       return products.filter(p => {
         const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
-        return !isExpired;
+        return !isExpired && p.status !== 'inactive';
       });
     }
     
@@ -88,7 +79,8 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
     if (selectedGroup) {
       return products.filter(p => {
         const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
-        return p.name === selectedGroup && !isExpired;
+        const groupKey = p.variant_group || p.name;
+        return groupKey === selectedGroup && !isExpired && p.status !== 'inactive';
       });
     }
     
@@ -156,8 +148,8 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
     }
   };
 
-  // Check if we're in a grouped view
   const isGroupView = selectedGroup !== null;
+  const searchResultsCount = isSearching ? getDisplayProducts.length : 0;
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -165,7 +157,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
       <div className="flex gap-2">
         <input 
           className="k-input flex-1 py-2 text-sm" 
-          placeholder="Search by name, SKU, or barcode..." 
+          placeholder="Search by name, local name, SKU, or barcode..." 
           value={search} 
           onChange={e => setSearch(e.target.value)} 
         />
@@ -178,6 +170,13 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
           disabled={!canProcessSales}
         />
       </div>
+
+      {/* Search Results Count */}
+      {isSearching && (
+        <div className="text-xs text-text-muted">
+          Found {searchResultsCount} product{searchResultsCount !== 1 ? 's' : ''}
+        </div>
+      )}
 
       {/* Wholesale Indicator */}
       {isWholesale && (

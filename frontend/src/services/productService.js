@@ -8,5 +8,6 @@ export const productService = {
   getLowStock: () => api.get('/products/low-stock'),
   getExpiredProducts: () => api.get('/products/expired'),
   create: (data) => api.post('/products', data),
-  update: (id, d) => api.put(`/products/${id}`, d),
+  update: (id, data) => api.put(`/products/${id}`, data),
+  delete: (id) => api.delete(`/products/${id}`),
 };
