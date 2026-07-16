@@ -153,7 +153,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
 
   return (
     <div className="flex flex-col h-full gap-3">
-      {/* Search Bar */}
+      {/* SEARCH BAR - Make sure this is visible */}
       <div className="flex gap-2">
         <input 
           className="k-input flex-1 py-2 text-sm" 
