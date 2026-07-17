@@ -48,13 +48,13 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
   // Group products by name (only when not searching)
   const groupedProducts = useMemo(() => {
     if (isSearching) return {};
-
+    
     const groups = {};
     const filtered = products.filter(p => {
       const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
       return !isExpired && p.status !== 'inactive';
     });
-
+    
     filtered.forEach(p => {
       const key = p.variant_group || p.name;
       if (!groups[key]) {
@@ -74,7 +74,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
         return !isExpired && p.status !== 'inactive';
       });
     }
-
+    
     // If a group is selected, show its variants
     if (selectedGroup) {
       return products.filter(p => {
@@ -83,7 +83,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
         return groupKey === selectedGroup && !isExpired && p.status !== 'inactive';
       });
     }
-
+    
     // Otherwise show grouped view
     return Object.keys(groupedProducts).map(name => ({
       name,
@@ -106,17 +106,17 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
       toast.error('Please clock in before adding products.');
       return false;
     }
-
+    
     if (product.expiry_date && new Date(product.expiry_date) <= new Date()) {
       toast.error(`"${product.name}" has expired. Cannot add to cart.`);
       return false;
     }
-
+    
     if (product.stock_quantity <= 0) {
       toast.error(`"${product.name}" is out of stock.`);
       return false;
     }
-
+    
     onAddToCart(product);
     toast.success(`Added: ${product.name}`);
     return true;
@@ -132,13 +132,13 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
       try {
         const r = await productService.getByBarcode(barcode.trim());
         const product = r.data.product;
-
+        
         if (product.expiry_date && new Date(product.expiry_date) <= new Date()) {
           toast.error(`"${product.name}" has expired. Cannot add to cart.`);
           setBarcode('');
           return;
         }
-
+        
         handleProductAdd(product);
         setBarcode('');
       } catch (err) {
@@ -153,22 +153,20 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
 
   return (
     <div className="flex flex-col h-full gap-3">
-      {/* SEARCH BAR - explicit sizing so it can never collapse to 0 width */}
-      <div className="flex gap-2 w-full">
-        <input
-          className="k-input py-2 text-sm"
-          style={{ flex: '1 1 0%', minWidth: '200px' }}
-          placeholder="Search by name, local name, SKU, or barcode..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+      {/* SEARCH BAR - Make sure this is visible */}
+      <div className="flex gap-2">
+        <input 
+          className="k-input flex-1 py-2 text-sm" 
+          placeholder="Search by name, local name, SKU, or barcode..." 
+          value={search} 
+          onChange={e => setSearch(e.target.value)} 
         />
-        <input
-          className={`k-input py-2 text-sm flex-shrink-0 ${!canProcessSales ? 'opacity-50 cursor-not-allowed' : ''}`}
-          style={{ width: '176px' }}
-          placeholder="Scan barcode..."
-          value={barcode}
-          onChange={e => setBarcode(e.target.value)}
-          onKeyDown={handleBarcode}
+        <input 
+          className={`k-input w-44 py-2 text-sm ${!canProcessSales ? 'opacity-50 cursor-not-allowed' : ''}`}
+          placeholder="Scan barcode..." 
+          value={barcode} 
+          onChange={e => setBarcode(e.target.value)} 
+          onKeyDown={handleBarcode} 
           disabled={!canProcessSales}
         />
       </div>
@@ -196,29 +194,29 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
 
       {/* Category Filters */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        <button
+        <button 
           onClick={() => {
             setActivecat('');
             setSelectedGroup(null);
-          }}
+          }} 
           className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-500 flex-shrink-0 transition-all ${
-            !activecat
-              ? 'bg-primary text-white'
+            !activecat 
+              ? 'bg-primary text-white' 
               : 'bg-surface-card border border-surface-border text-text-muted hover:border-primary'
           }`}
         >
           All
         </button>
         {categories.map(c => (
-          <button
-            key={c.category_id}
+          <button 
+            key={c.category_id} 
             onClick={() => {
               setActivecat(c.category_id);
               setSelectedGroup(null);
-            }}
+            }} 
             className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap font-500 flex-shrink-0 transition-all ${
-              activecat === c.category_id
-                ? 'bg-primary text-white'
+              activecat === c.category_id 
+                ? 'bg-primary text-white' 
                 : 'bg-surface-card border border-surface-border text-text-muted hover:border-primary'
             }`}
           >
@@ -267,10 +265,10 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
             {isGroupView || isSearching ? (
               // Show individual products (variants or search results)
               getDisplayProducts.map(p => (
-                <ProductCard
-                  key={p.product_id}
-                  product={p}
-                  onAdd={handleProductAdd}
+                <ProductCard 
+                  key={p.product_id} 
+                  product={p} 
+                  onAdd={handleProductAdd} 
                   isWholesale={isWholesale}
                   canProcessSales={canProcessSales}
                   showSku={isSearching}
