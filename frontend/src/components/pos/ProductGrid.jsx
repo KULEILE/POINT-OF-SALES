@@ -67,6 +67,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
 
   // Get display products based on current state
   const getDisplayProducts = useMemo(() => {
+    // If searching, show individual products
     if (isSearching) {
       return products.filter(p => {
         const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
@@ -74,6 +75,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
       });
     }
     
+    // If a group is selected, show its variants
     if (selectedGroup) {
       return products.filter(p => {
         const isExpired = p.expiry_date && new Date(p.expiry_date) <= new Date();
@@ -82,6 +84,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
       });
     }
     
+    // Otherwise show grouped view
     return Object.keys(groupedProducts).map(name => ({
       name,
       variants: groupedProducts[name],
@@ -150,16 +153,16 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
 
   return (
     <div className="flex flex-col h-full gap-3">
-      {/* SEARCH BAR - Clearly visible at the top */}
-      <div className="flex gap-2 w-full">
+      {/* SEARCH BAR - Make sure this is visible */}
+      <div className="flex gap-2">
         <input 
-          className="k-input flex-1 py-2.5 text-sm" 
+          className="k-input flex-1 py-2 text-sm" 
           placeholder="Search by name, local name, SKU, or barcode..." 
           value={search} 
           onChange={e => setSearch(e.target.value)} 
         />
         <input 
-          className={`k-input w-44 py-2.5 text-sm ${!canProcessSales ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`k-input w-44 py-2 text-sm ${!canProcessSales ? 'opacity-50 cursor-not-allowed' : ''}`}
           placeholder="Scan barcode..." 
           value={barcode} 
           onChange={e => setBarcode(e.target.value)} 
@@ -170,7 +173,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
 
       {/* Search Results Count */}
       {isSearching && (
-        <div className="text-xs text-text-muted px-1">
+        <div className="text-xs text-text-muted">
           Found {searchResultsCount} product{searchResultsCount !== 1 ? 's' : ''}
         </div>
       )}
@@ -260,6 +263,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {isGroupView || isSearching ? (
+              // Show individual products (variants or search results)
               getDisplayProducts.map(p => (
                 <ProductCard 
                   key={p.product_id} 
@@ -271,6 +275,7 @@ const ProductGrid = ({ onAddToCart, refreshTrigger, isWholesale, canProcessSales
                 />
               ))
             ) : (
+              // Show grouped products
               getDisplayProducts.map(group => (
                 <GroupedProductCard
                   key={group.name}
