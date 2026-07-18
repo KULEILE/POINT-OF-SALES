@@ -9,4 +9,5 @@ export const reportService = {
   profitLoss: (params) => api.get('/reports/profit-loss', { params }),
   expiredProducts: () => api.get('/reports/expired-products'),
   debtors: () => api.get('/reports/debtors'),
+  returnsSummary: (params) => api.get('/reports/returns-summary', { params }),
 };

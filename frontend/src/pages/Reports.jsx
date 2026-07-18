@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { reportService } from '../services/reportService';
 import { shiftService } from '../services/shiftService';
+import { returnService } from '../services/returnService';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/formatters';
 
 const Reports = () => {
@@ -14,6 +15,9 @@ const Reports = () => {
   const [debtors, setDebtors] = useState([]);
   const [debtorTotals, setDebtorTotals] = useState(null);
   const [debtorsLoading, setDebtorsLoading] = useState(false);
+  const [returnsSummary, setReturnsSummary] = useState(null);
+  const [returnsList, setReturnsList] = useState([]);
+  const [returnsLoading, setReturnsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,6 +44,9 @@ const Reports = () => {
     }
     if (tab === 'debtors') {
       loadDebtors();
+    }
+    if (tab === 'returns') {
+      loadReturns();
     }
   }, [tab]);
 
@@ -68,13 +75,30 @@ const Reports = () => {
     }
   };
 
+  const loadReturns = async () => {
+    setReturnsLoading(true);
+    try {
+      const [summaryRes, listRes] = await Promise.all([
+        reportService.returnsSummary(),
+        returnService.getAll({ limit: 20 })
+      ]);
+      setReturnsSummary(summaryRes.data || null);
+      setReturnsList(listRes.data.returns || []);
+    } catch (err) {
+      console.error('Failed to load returns report:', err);
+    } finally {
+      setReturnsLoading(false);
+    }
+  };
+
   const tabs = [
     { key: 'daily', label: 'Daily Sales' },
     { key: 'products', label: 'Top Products' },
     { key: 'cashiers', label: 'Cashier Performance' },
     { key: 'profit', label: 'Profit & Loss' },
     { key: 'shifts', label: 'Shift Report' },
-    { key: 'debtors', label: 'Debtors' }
+    { key: 'debtors', label: 'Debtors' },
+    { key: 'returns', label: 'Returns' }
   ];
 
   return (
@@ -100,7 +124,7 @@ const Reports = () => {
         ))}
       </div>
 
-      {loading && tab !== 'shifts' && tab !== 'debtors' ? (
+      {loading && tab !== 'shifts' && tab !== 'debtors' && tab !== 'returns' ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-2 border-surface-border border-t-primary rounded-full animate-spin" />
         </div>
@@ -409,6 +433,205 @@ const Reports = () => {
                     </table>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'returns' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs text-text-muted">Returns and refunds overview</p>
+                <button
+                  onClick={loadReturns}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {returnsLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-surface-border border-t-primary rounded-full animate-spin" />
+                </div>
+              ) : (
+                <>
+                  {returnsSummary && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                      <div className="k-card">
+                        <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Total Refunded</p>
+                        <p className="text-2xl font-800 text-danger tracking-tight">
+                          {formatCurrency(returnsSummary.summary.total_refunded)}
+                        </p>
+                      </div>
+                      <div className="k-card">
+                        <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Total Returns</p>
+                        <p className="text-2xl font-800 text-text-primary tracking-tight">
+                          {returnsSummary.summary.total_returns}
+                        </p>
+                      </div>
+                      <div className="k-card">
+                        <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Avg Refund</p>
+                        <p className="text-2xl font-800 text-warning tracking-tight">
+                          {formatCurrency(returnsSummary.summary.avg_refund)}
+                        </p>
+                      </div>
+                      <div className="k-card">
+                        <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Return Rate</p>
+                        <p className="text-2xl font-800 text-accent tracking-tight">
+                          {returnsSummary.summary.return_rate != null
+                            ? `${returnsSummary.summary.return_rate.toFixed(1)}%`
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {returnsSummary && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                      <div className="k-card p-0 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">By Refund Method</p>
+                        </div>
+                        <table className="k-table w-full">
+                          <thead>
+                            <tr>
+                              <th>Method</th>
+                              <th>Count</th>
+                              <th>Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {returnsSummary.by_method.length === 0 ? (
+                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
+                            ) : returnsSummary.by_method.map((m, i) => (
+                              <tr key={i}>
+                                <td className="capitalize">{m.refund_method}</td>
+                                <td>{m.return_count}</td>
+                                <td className="text-danger font-600">{formatCurrency(m.total_amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="k-card p-0 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">By Cashier</p>
+                        </div>
+                        <table className="k-table w-full">
+                          <thead>
+                            <tr>
+                              <th>Cashier</th>
+                              <th>Count</th>
+                              <th>Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {returnsSummary.by_cashier.length === 0 ? (
+                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
+                            ) : returnsSummary.by_cashier.map((c, i) => (
+                              <tr key={i}>
+                                <td className="font-500 text-text-primary">{c.cashier_name || '—'}</td>
+                                <td>{c.return_count}</td>
+                                <td className="text-danger font-600">{formatCurrency(c.total_amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="k-card p-0 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Returned Products</p>
+                        </div>
+                        <table className="k-table w-full">
+                          <thead>
+                            <tr>
+                              <th>Product</th>
+                              <th>Qty</th>
+                              <th>Refunded</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {returnsSummary.top_returned_products.length === 0 ? (
+                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
+                            ) : returnsSummary.top_returned_products.map((p, i) => (
+                              <tr key={i}>
+                                <td className="font-500 text-text-primary">{p.product_name}</td>
+                                <td>{p.total_qty_returned}</td>
+                                <td className="text-danger font-600">{formatCurrency(p.total_refunded)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="k-card p-0 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Reasons</p>
+                        </div>
+                        <table className="k-table w-full">
+                          <thead>
+                            <tr>
+                              <th>Reason</th>
+                              <th>Count</th>
+                              <th>Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {returnsSummary.top_reasons.length === 0 ? (
+                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
+                            ) : returnsSummary.top_reasons.map((r, i) => (
+                              <tr key={i}>
+                                <td className="text-text-primary">{r.reason}</td>
+                                <td>{r.return_count}</td>
+                                <td className="text-danger font-600">{formatCurrency(r.total_amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="k-card p-0 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-surface-border">
+                      <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Recent Returns</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="k-table w-full">
+                        <thead>
+                          <tr>
+                            <th>Return #</th>
+                            <th>Original Receipt</th>
+                            <th>Customer</th>
+                            <th>Cashier</th>
+                            <th>Amount</th>
+                            <th>Method</th>
+                            <th>Reason</th>
+                            <th>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {returnsList.length === 0 ? (
+                            <tr><td colSpan={8} className="text-center py-8 text-text-faint">No returns found</td></tr>
+                          ) : returnsList.map((r) => (
+                            <tr key={r.return_id}>
+                              <td className="font-mono text-xs text-text-muted">{r.return_receipt_number}</td>
+                              <td className="font-mono text-xs text-text-muted">{r.original_receipt || '—'}</td>
+                              <td className="text-text-primary">{r.customer_name || 'Walk-in'}</td>
+                              <td>{r.processed_by_name || r.cashier_name}</td>
+                              <td className="text-danger font-600">{formatCurrency(r.refund_amount)}</td>
+                              <td className="capitalize">{r.refund_method}</td>
+                              <td className="text-xs">{r.reason}</td>
+                              <td className="text-xs">{formatDateTime(r.created_at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}

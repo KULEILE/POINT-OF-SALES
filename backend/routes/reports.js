@@ -11,5 +11,6 @@ router.get('/cashier-performance', protect, allowRoles('admin','manager','audito
 router.get('/profit-loss', protect, allowRoles('admin','manager','auditor'), c.profitLoss);
 router.get('/expired-products', protect, allowRoles('admin','manager'), c.expiredProductsReport);
 router.get('/debtors', protect, allowRoles('admin','manager','auditor'), c.debtorsReport);
+router.get('/returns-summary', protect, allowRoles('admin','manager','auditor'), c.returnsReport);
 
 module.exports = router;

@@ -127,6 +127,11 @@ const summary = async (req, res) => {
       `SELECT COUNT(*)::INT AS debtor_count, COALESCE(SUM(current_balance),0) AS total_owed
        FROM customers WHERE current_balance > 0`
     );
+
+    const returnsToday = await pool.query(
+      `SELECT COUNT(*)::INT AS count, COALESCE(SUM(refund_amount),0) AS total
+       FROM returns WHERE DATE(created_at) = CURRENT_DATE`
+    );
     
     return res.json({ 
       success: true, 
@@ -139,7 +144,9 @@ const summary = async (req, res) => {
         split_transactions: splitStats.rows[0]?.split_transactions || 0,
         total_splits: splitStats.rows[0]?.total_splits || 0,
         debtor_count: debtorsStats.rows[0].debtor_count,
-        total_owed: debtorsStats.rows[0].total_owed
+        total_owed: debtorsStats.rows[0].total_owed,
+        returns_today_count: returnsToday.rows[0].count,
+        returns_today_total: returnsToday.rows[0].total
       } 
     });
   } catch (err) {
@@ -260,6 +267,114 @@ const debtorsReport = async (req, res) => {
   }
 };
 
+const returnsReport = async (req, res) => {
+  const { date_from, date_to } = req.query;
+
+  try {
+    const params = [];
+    let dateFilter = '';
+    if (date_from) { params.push(date_from); dateFilter += ` AND DATE(r.created_at) >= $${params.length}`; }
+    if (date_to)   { params.push(date_to);   dateFilter += ` AND DATE(r.created_at) <= $${params.length}`; }
+
+    const summaryResult = await pool.query(
+      `SELECT
+        COUNT(*)::INT AS total_returns,
+        COALESCE(SUM(refund_amount),0) AS total_refunded,
+        COALESCE(AVG(refund_amount),0) AS avg_refund
+       FROM returns r
+       WHERE 1=1 ${dateFilter}`,
+      params
+    );
+
+    const methodResult = await pool.query(
+      `SELECT 
+        refund_method,
+        COUNT(*)::INT AS return_count,
+        COALESCE(SUM(refund_amount),0) AS total_amount
+       FROM returns r
+       WHERE 1=1 ${dateFilter}
+       GROUP BY refund_method
+       ORDER BY total_amount DESC`,
+      params
+    );
+
+    const cashierResult = await pool.query(
+      `SELECT 
+        cashier_name,
+        COUNT(*)::INT AS return_count,
+        COALESCE(SUM(refund_amount),0) AS total_amount
+       FROM returns r
+       WHERE 1=1 ${dateFilter}
+       GROUP BY cashier_name
+       ORDER BY total_amount DESC`,
+      params
+    );
+
+    const productResult = await pool.query(
+      `SELECT 
+        p.name AS product_name,
+        p.sku,
+        COALESCE(SUM(ri.quantity),0) AS total_qty_returned,
+        COALESCE(SUM(ri.total_amount),0) AS total_refunded
+       FROM return_items ri
+       JOIN returns r ON ri.return_id = r.return_id
+       JOIN products p ON ri.product_id = p.product_id
+       WHERE 1=1 ${dateFilter}
+       GROUP BY p.name, p.sku
+       ORDER BY total_refunded DESC
+       LIMIT 10`,
+      params
+    );
+
+    const reasonResult = await pool.query(
+      `SELECT 
+        COALESCE(NULLIF(TRIM(reason), ''), 'Not specified') AS reason,
+        COUNT(*)::INT AS return_count,
+        COALESCE(SUM(refund_amount),0) AS total_amount
+       FROM returns r
+       WHERE 1=1 ${dateFilter}
+       GROUP BY COALESCE(NULLIF(TRIM(reason), ''), 'Not specified')
+       ORDER BY return_count DESC
+       LIMIT 10`,
+      params
+    );
+
+    const salesParams = [];
+    let salesDateFilter = '';
+    if (date_from) { salesParams.push(date_from); salesDateFilter += ` AND DATE(transaction_date) >= $${salesParams.length}`; }
+    if (date_to)   { salesParams.push(date_to);   salesDateFilter += ` AND DATE(transaction_date) <= $${salesParams.length}`; }
+
+    const salesResult = await pool.query(
+      `SELECT COALESCE(SUM(total_amount),0) AS total_sales
+       FROM transactions
+       WHERE status = 'completed' ${salesDateFilter}`,
+      salesParams
+    );
+
+    const totalRefunded = parseFloat(summaryResult.rows[0].total_refunded) || 0;
+    const totalSales = parseFloat(salesResult.rows[0].total_sales) || 0;
+    const returnRate = totalSales > 0 ? (totalRefunded / totalSales) * 100 : null;
+
+    return res.json({
+      success: true,
+      summary: {
+        total_returns: summaryResult.rows[0].total_returns,
+        total_refunded: totalRefunded,
+        avg_refund: parseFloat(summaryResult.rows[0].avg_refund) || 0,
+        total_sales: totalSales,
+        return_rate: returnRate
+      },
+      by_method: methodResult.rows,
+      by_cashier: cashierResult.rows,
+      top_returned_products: productResult.rows,
+      top_reasons: reasonResult.rows
+    });
+  } catch (err) {
+    console.error('[reports/returnsReport]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch returns report.' });
+  }
+};
+
 module.exports = { 
   dailySales, 
   topProducts, 
@@ -269,5 +384,6 @@ module.exports = {
   paymentMethodReport,
   summary,
   expiredProductsReport,
-  debtorsReport
+  debtorsReport,
+  returnsReport
 };
