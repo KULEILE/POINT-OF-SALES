@@ -14,11 +14,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
-  LineChart,
-  Line,
-  Area,
-  AreaChart
+  Legend
 } from 'recharts';
 
 const Reports = () => {
@@ -36,15 +32,6 @@ const Reports = () => {
   const [returnsList, setReturnsList] = useState([]);
   const [returnsLoading, setReturnsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  // Chart colors
-  const COLORS = {
-    cash: '#10B981',
-    card: '#3B82F6',
-    mobile: '#8B5CF6',
-    store_credit: '#F59E0B',
-    default: '#6B7280'
-  };
 
   const PIE_COLORS = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#EC4899'];
 
@@ -181,28 +168,6 @@ const Reports = () => {
       amount: parseFloat(c.total_amount) || 0,
       count: c.return_count || 0
     }));
-  };
-
-  // Generate sample trend data (can be enhanced with real data from backend)
-  const getTrendData = () => {
-    if (!returnsSummary) return [];
-    // This would ideally come from a separate API endpoint
-    // For now, generate sample data based on returns count
-    const days = 7;
-    const data = [];
-    const totalReturns = returnsSummary.summary?.total_returns || 0;
-    const avgPerDay = Math.max(1, Math.round(totalReturns / days));
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      data.push({
-        date: formatDate(date),
-        day: date.toLocaleDateString('en', { weekday: 'short' }),
-        returns: Math.max(0, avgPerDay + Math.floor(Math.random() * 5) - 2)
-      });
-    }
-    return data;
   };
 
   return (
@@ -590,7 +555,7 @@ const Reports = () => {
                     </div>
                   )}
 
-                  {/* Charts Section */}
+                  {/* Charts Section - Only charts, no duplicate tables */}
                   {returnsSummary && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                       {/* Refund Method Pie Chart */}
@@ -624,30 +589,6 @@ const Reports = () => {
                               </PieChart>
                             </ResponsiveContainer>
                           )}
-                        </div>
-                      </div>
-
-                      {/* Returns Trend */}
-                      <div className="k-card">
-                        <div className="px-4 py-3 border-b border-surface-border">
-                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Returns Trend (Last 7 Days)</p>
-                        </div>
-                        <div className="p-4">
-                          <ResponsiveContainer width="100%" height={250}>
-                            <AreaChart data={getTrendData()}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                              <XAxis dataKey="day" stroke="#9CA3AF" fontSize={11} />
-                              <YAxis stroke="#9CA3AF" fontSize={11} />
-                              <Tooltip content={<CustomTooltip />} />
-                              <Area
-                                type="monotone"
-                                dataKey="returns"
-                                stroke="#8B5CF6"
-                                fill="#8B5CF6"
-                                fillOpacity={0.2}
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
                         </div>
                       </div>
 
@@ -703,8 +644,8 @@ const Reports = () => {
                         </div>
                       </div>
 
-                      {/* Cashier Returns Bar Chart */}
-                      <div className="k-card lg:col-span-2">
+                      {/* Returns by Cashier Bar Chart */}
+                      <div className="k-card">
                         <div className="px-4 py-3 border-b border-surface-border">
                           <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Returns by Cashier</p>
                         </div>
@@ -712,16 +653,17 @@ const Reports = () => {
                           {getCashierChartData().length === 0 ? (
                             <p className="text-center text-text-faint py-8">No data available</p>
                           ) : (
-                            <ResponsiveContainer width="100%" height={200}>
+                            <ResponsiveContainer width="100%" height={250}>
                               <BarChart
                                 data={getCashierChartData()}
-                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                layout="vertical"
+                                margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
                               >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} />
-                                <YAxis stroke="#9CA3AF" fontSize={11} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+                                <XAxis type="number" stroke="#9CA3AF" fontSize={11} />
+                                <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={50} />
                                 <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="amount" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="amount" fill="#3B82F6" radius={[0, 4, 4, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           )}
@@ -730,115 +672,7 @@ const Reports = () => {
                     </div>
                   )}
 
-                  {/* Summary Tables */}
-                  {returnsSummary && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                      <div className="k-card p-0 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-surface-border">
-                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">By Refund Method</p>
-                        </div>
-                        <table className="k-table w-full">
-                          <thead>
-                            <tr>
-                              <th>Method</th>
-                              <th>Count</th>
-                              <th>Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {returnsSummary.by_method.length === 0 ? (
-                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
-                            ) : returnsSummary.by_method.map((m, i) => (
-                              <tr key={i}>
-                                <td className="capitalize">{m.refund_method}</td>
-                                <td>{m.return_count}</td>
-                                <td className="text-danger font-600">{formatCurrency(m.total_amount)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="k-card p-0 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-surface-border">
-                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">By Cashier</p>
-                        </div>
-                        <table className="k-table w-full">
-                          <thead>
-                            <tr>
-                              <th>Cashier</th>
-                              <th>Count</th>
-                              <th>Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {returnsSummary.by_cashier.length === 0 ? (
-                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
-                            ) : returnsSummary.by_cashier.map((c, i) => (
-                              <tr key={i}>
-                                <td className="font-500 text-text-primary">{c.cashier_name || '—'}</td>
-                                <td>{c.return_count}</td>
-                                <td className="text-danger font-600">{formatCurrency(c.total_amount)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="k-card p-0 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-surface-border">
-                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Returned Products</p>
-                        </div>
-                        <table className="k-table w-full">
-                          <thead>
-                            <tr>
-                              <th>Product</th>
-                              <th>Qty</th>
-                              <th>Refunded</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {returnsSummary.top_returned_products.length === 0 ? (
-                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
-                            ) : returnsSummary.top_returned_products.map((p, i) => (
-                              <tr key={i}>
-                                <td className="font-500 text-text-primary">{p.product_name}</td>
-                                <td>{p.total_qty_returned}</td>
-                                <td className="text-danger font-600">{formatCurrency(p.total_refunded)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="k-card p-0 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-surface-border">
-                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Reasons</p>
-                        </div>
-                        <table className="k-table w-full">
-                          <thead>
-                            <tr>
-                              <th>Reason</th>
-                              <th>Count</th>
-                              <th>Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {returnsSummary.top_reasons.length === 0 ? (
-                              <tr><td colSpan={3} className="text-center py-6 text-text-faint">No data</td></tr>
-                            ) : returnsSummary.top_reasons.map((r, i) => (
-                              <tr key={i}>
-                                <td className="text-text-primary">{r.reason}</td>
-                                <td>{r.return_count}</td>
-                                <td className="text-danger font-600">{formatCurrency(r.total_amount)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
+                  {/* Recent Returns Table - Only one table at the bottom */}
                   <div className="k-card p-0 overflow-hidden">
                     <div className="px-4 py-3 border-b border-surface-border">
                       <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Recent Returns</p>
