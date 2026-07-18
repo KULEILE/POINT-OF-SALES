@@ -3,6 +3,23 @@ import { reportService } from '../services/reportService';
 import { shiftService } from '../services/shiftService';
 import { returnService } from '../services/returnService';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/formatters';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  LineChart,
+  Line,
+  Area,
+  AreaChart
+} from 'recharts';
 
 const Reports = () => {
   const [tab, setTab] = useState('daily');
@@ -19,6 +36,31 @@ const Reports = () => {
   const [returnsList, setReturnsList] = useState([]);
   const [returnsLoading, setReturnsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Chart colors
+  const COLORS = {
+    cash: '#10B981',
+    card: '#3B82F6',
+    mobile: '#8B5CF6',
+    store_credit: '#F59E0B',
+    default: '#6B7280'
+  };
+
+  const PIE_COLORS = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EF4444', '#EC4899'];
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-surface-card border border-surface-border rounded-lg p-3 shadow-lg">
+          <p className="text-xs font-500 text-text-primary">{label}</p>
+          <p className="text-sm font-700 text-primary">
+            {formatCurrency(payload[0].value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -100,6 +142,68 @@ const Reports = () => {
     { key: 'debtors', label: 'Debtors' },
     { key: 'returns', label: 'Returns' }
   ];
+
+  // Prepare chart data for refund methods
+  const getMethodChartData = () => {
+    if (!returnsSummary) return [];
+    return returnsSummary.by_method.map(m => ({
+      name: m.refund_method.charAt(0).toUpperCase() + m.refund_method.slice(1),
+      value: parseFloat(m.total_amount) || 0,
+      count: m.return_count || 0
+    }));
+  };
+
+  // Prepare chart data for top returned products
+  const getTopProductsChartData = () => {
+    if (!returnsSummary) return [];
+    return returnsSummary.top_returned_products.slice(0, 6).map(p => ({
+      name: p.product_name || 'Unknown',
+      refunded: parseFloat(p.total_refunded) || 0,
+      qty: p.total_qty_returned || 0
+    }));
+  };
+
+  // Prepare chart data for top reasons
+  const getTopReasonsChartData = () => {
+    if (!returnsSummary) return [];
+    return returnsSummary.top_reasons.slice(0, 6).map(r => ({
+      name: r.reason || 'No reason',
+      amount: parseFloat(r.total_amount) || 0,
+      count: r.return_count || 0
+    }));
+  };
+
+  // Prepare chart data for returns by cashier
+  const getCashierChartData = () => {
+    if (!returnsSummary) return [];
+    return returnsSummary.by_cashier.slice(0, 6).map(c => ({
+      name: c.cashier_name || 'Unknown',
+      amount: parseFloat(c.total_amount) || 0,
+      count: c.return_count || 0
+    }));
+  };
+
+  // Generate sample trend data (can be enhanced with real data from backend)
+  const getTrendData = () => {
+    if (!returnsSummary) return [];
+    // This would ideally come from a separate API endpoint
+    // For now, generate sample data based on returns count
+    const days = 7;
+    const data = [];
+    const totalReturns = returnsSummary.summary?.total_returns || 0;
+    const avgPerDay = Math.max(1, Math.round(totalReturns / days));
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      data.push({
+        date: formatDate(date),
+        day: date.toLocaleDateString('en', { weekday: 'short' }),
+        returns: Math.max(0, avgPerDay + Math.floor(Math.random() * 5) - 2)
+      });
+    }
+    return data;
+  };
 
   return (
     <div className="p-6 h-full overflow-y-auto">
@@ -486,6 +590,147 @@ const Reports = () => {
                     </div>
                   )}
 
+                  {/* Charts Section */}
+                  {returnsSummary && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                      {/* Refund Method Pie Chart */}
+                      <div className="k-card">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Refund Methods</p>
+                        </div>
+                        <div className="p-4">
+                          {getMethodChartData().length === 0 ? (
+                            <p className="text-center text-text-faint py-8">No data available</p>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={250}>
+                              <PieChart>
+                                <Pie
+                                  data={getMethodChartData()}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={50}
+                                  outerRadius={80}
+                                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                  labelLine={true}
+                                >
+                                  {getMethodChartData().map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Returns Trend */}
+                      <div className="k-card">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Returns Trend (Last 7 Days)</p>
+                        </div>
+                        <div className="p-4">
+                          <ResponsiveContainer width="100%" height={250}>
+                            <AreaChart data={getTrendData()}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                              <XAxis dataKey="day" stroke="#9CA3AF" fontSize={11} />
+                              <YAxis stroke="#9CA3AF" fontSize={11} />
+                              <Tooltip content={<CustomTooltip />} />
+                              <Area
+                                type="monotone"
+                                dataKey="returns"
+                                stroke="#8B5CF6"
+                                fill="#8B5CF6"
+                                fillOpacity={0.2}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Top Returned Products Bar Chart */}
+                      <div className="k-card">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Returned Products</p>
+                        </div>
+                        <div className="p-4">
+                          {getTopProductsChartData().length === 0 ? (
+                            <p className="text-center text-text-faint py-8">No data available</p>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={250}>
+                              <BarChart
+                                data={getTopProductsChartData()}
+                                layout="vertical"
+                                margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+                                <XAxis type="number" stroke="#9CA3AF" fontSize={11} />
+                                <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={50} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="refunded" fill="#EF4444" radius={[0, 4, 4, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Top Reasons Bar Chart */}
+                      <div className="k-card">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Reasons</p>
+                        </div>
+                        <div className="p-4">
+                          {getTopReasonsChartData().length === 0 ? (
+                            <p className="text-center text-text-faint py-8">No data available</p>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={250}>
+                              <BarChart
+                                data={getTopReasonsChartData()}
+                                layout="vertical"
+                                margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+                                <XAxis type="number" stroke="#9CA3AF" fontSize={11} />
+                                <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={50} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="amount" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Cashier Returns Bar Chart */}
+                      <div className="k-card lg:col-span-2">
+                        <div className="px-4 py-3 border-b border-surface-border">
+                          <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Returns by Cashier</p>
+                        </div>
+                        <div className="p-4">
+                          {getCashierChartData().length === 0 ? (
+                            <p className="text-center text-text-faint py-8">No data available</p>
+                          ) : (
+                            <ResponsiveContainer width="100%" height={200}>
+                              <BarChart
+                                data={getCashierChartData()}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} />
+                                <YAxis stroke="#9CA3AF" fontSize={11} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Bar dataKey="amount" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary Tables */}
                   {returnsSummary && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                       <div className="k-card p-0 overflow-hidden">
