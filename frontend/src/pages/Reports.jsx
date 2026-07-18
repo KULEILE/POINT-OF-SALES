@@ -555,7 +555,7 @@ const Reports = () => {
                     </div>
                   )}
 
-                  {/* Charts Section - Only charts, no duplicate tables */}
+                  {/* CHARTS ONLY - NO DUPLICATE TABLES */}
                   {returnsSummary && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                       {/* Refund Method Pie Chart */}
@@ -672,7 +672,7 @@ const Reports = () => {
                     </div>
                   )}
 
-                  {/* Recent Returns Table - Only one table at the bottom */}
+                  {/* ONLY ONE TABLE - Recent Returns */}
                   <div className="k-card p-0 overflow-hidden">
                     <div className="px-4 py-3 border-b border-surface-border">
                       <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Recent Returns</p>
