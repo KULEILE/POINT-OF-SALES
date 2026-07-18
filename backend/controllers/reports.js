@@ -1,5 +1,20 @@
 const pool = require('../config/db');
 
+const isOverdue = (dueDate) => {
+  if (!dueDate) return false;
+  const today = new Date();
+  const due = new Date(dueDate);
+  return today > due;
+};
+
+const getDaysOverdue = (dueDate) => {
+  if (!dueDate) return null;
+  const today = new Date();
+  const due = new Date(dueDate);
+  const diffTime = today - due;
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+};
+
 const dailySales = async (req, res) => {
   try {
     const result = await pool.query(`SELECT * FROM v_daily_sales LIMIT 30`);
@@ -100,7 +115,6 @@ const summary = async (req, res) => {
     const lowstock = await pool.query(`SELECT COUNT(*)::INT AS count FROM products WHERE status='active' AND stock_quantity<=reorder_level`);
     const expired = await pool.query(`SELECT COUNT(*)::INT AS count FROM products WHERE status='active' AND expiry_date IS NOT NULL AND expiry_date <= CURRENT_DATE AND stock_quantity > 0`);
     
-    // Get split payment stats
     const splitStats = await pool.query(`
       SELECT 
         COUNT(DISTINCT transaction_id) AS split_transactions,
@@ -108,6 +122,11 @@ const summary = async (req, res) => {
       FROM payment_splits
       WHERE created_at >= CURRENT_DATE
     `);
+
+    const debtorsStats = await pool.query(
+      `SELECT COUNT(*)::INT AS debtor_count, COALESCE(SUM(current_balance),0) AS total_owed
+       FROM customers WHERE current_balance > 0`
+    );
     
     return res.json({ 
       success: true, 
@@ -118,7 +137,9 @@ const summary = async (req, res) => {
         low_stock_count: lowstock.rows[0].count,
         expired_count: expired.rows[0].count,
         split_transactions: splitStats.rows[0]?.split_transactions || 0,
-        total_splits: splitStats.rows[0]?.total_splits || 0
+        total_splits: splitStats.rows[0]?.total_splits || 0,
+        debtor_count: debtorsStats.rows[0].debtor_count,
+        total_owed: debtorsStats.rows[0].total_owed
       } 
     });
   } catch (err) {
@@ -163,6 +184,82 @@ const expiredProductsReport = async (req, res) => {
   }
 };
 
+const debtorsReport = async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.customer_id,
+        c.full_name,
+        c.phone,
+        c.business_name,
+        c.customer_type,
+        c.credit_limit,
+        c.current_balance,
+        oldest.transaction_date AS oldest_transaction_date,
+        oldest.due_date AS due_date,
+        oldest.payment_method AS oldest_payment_method,
+        lastpay.payment_date AS last_payment_date,
+        lastpay.amount AS last_payment_amount
+      FROM customers c
+      LEFT JOIN LATERAL (
+        SELECT t.transaction_date, t.due_date, t.payment_method
+        FROM transactions t
+        WHERE t.customer_id = c.customer_id
+          AND t.payment_method IN ('credit', 'layby')
+          AND t.payment_status = 'pending'
+        ORDER BY t.transaction_date ASC
+        LIMIT 1
+      ) oldest ON true
+      LEFT JOIN LATERAL (
+        SELECT payment_date, amount
+        FROM (
+          SELECT t.transaction_date AS payment_date, ct.amount AS amount
+          FROM credit_transactions ct
+          JOIN transactions t ON ct.transaction_id = t.transaction_id
+          WHERE ct.customer_id = c.customer_id AND ct.transaction_type = 'payment'
+          UNION ALL
+          SELECT lp.payment_date, lp.amount_paid AS amount
+          FROM layby_payments lp
+          JOIN transactions t2 ON lp.transaction_id = t2.transaction_id
+          WHERE t2.customer_id = c.customer_id
+        ) combined_payments
+        ORDER BY payment_date DESC
+        LIMIT 1
+      ) lastpay ON true
+      WHERE c.current_balance > 0
+      ORDER BY c.current_balance DESC
+    `);
+
+    const debtors = result.rows.map(row => ({
+      ...row,
+      is_overdue: isOverdue(row.due_date),
+      days_overdue: row.due_date ? getDaysOverdue(row.due_date) : null,
+      available_credit: row.credit_limit != null
+        ? parseFloat(row.credit_limit) - parseFloat(row.current_balance)
+        : null
+    }));
+
+    const totals = debtors.reduce((acc, d) => {
+      acc.total_owed += parseFloat(d.current_balance) || 0;
+      if (d.is_overdue) acc.overdue_count += 1;
+      return acc;
+    }, { total_owed: 0, overdue_count: 0 });
+
+    return res.json({
+      success: true,
+      report: debtors,
+      totals: {
+        debtor_count: debtors.length,
+        total_owed: totals.total_owed,
+        overdue_count: totals.overdue_count
+      }
+    });
+  } catch (err) {
+    console.error('[reports/debtorsReport]', err.message);
+    return res.status(500).json({ success: false, message: 'Failed to fetch debtors report.' });
+  }
+};
+
 module.exports = { 
   dailySales, 
   topProducts, 
@@ -171,5 +268,6 @@ module.exports = {
   profitLoss, 
   paymentMethodReport,
   summary,
-  expiredProductsReport
+  expiredProductsReport,
+  debtorsReport
 };

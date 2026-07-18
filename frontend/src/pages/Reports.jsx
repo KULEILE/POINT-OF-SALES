@@ -11,6 +11,9 @@ const Reports = () => {
   const [profitLoss, setProfitLoss] = useState(null);
   const [shifts, setShifts] = useState([]);
   const [shiftsLoading, setShiftsLoading] = useState(false);
+  const [debtors, setDebtors] = useState([]);
+  const [debtorTotals, setDebtorTotals] = useState(null);
+  const [debtorsLoading, setDebtorsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,6 +38,9 @@ const Reports = () => {
     if (tab === 'shifts') {
       loadShifts();
     }
+    if (tab === 'debtors') {
+      loadDebtors();
+    }
   }, [tab]);
 
   const loadShifts = async () => {
@@ -49,12 +55,26 @@ const Reports = () => {
     }
   };
 
+  const loadDebtors = async () => {
+    setDebtorsLoading(true);
+    try {
+      const response = await reportService.debtors();
+      setDebtors(response.data.report || []);
+      setDebtorTotals(response.data.totals || null);
+    } catch (err) {
+      console.error('Failed to load debtors report:', err);
+    } finally {
+      setDebtorsLoading(false);
+    }
+  };
+
   const tabs = [
     { key: 'daily', label: 'Daily Sales' },
     { key: 'products', label: 'Top Products' },
     { key: 'cashiers', label: 'Cashier Performance' },
     { key: 'profit', label: 'Profit & Loss' },
-    { key: 'shifts', label: 'Shift Report' }
+    { key: 'shifts', label: 'Shift Report' },
+    { key: 'debtors', label: 'Debtors' }
   ];
 
   return (
@@ -80,7 +100,7 @@ const Reports = () => {
         ))}
       </div>
 
-      {loading && tab !== 'shifts' ? (
+      {loading && tab !== 'shifts' && tab !== 'debtors' ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-2 border-surface-border border-t-primary rounded-full animate-spin" />
         </div>
@@ -277,6 +297,114 @@ const Reports = () => {
                             </tr>
                           );
                         })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'debtors' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs text-text-muted">Customers with an outstanding balance</p>
+                <button
+                  onClick={loadDebtors}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {debtorTotals && (
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                  <div className="k-card">
+                    <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Total Owed</p>
+                    <p className="text-2xl font-800 text-danger tracking-tight">
+                      {formatCurrency(debtorTotals.total_owed)}
+                    </p>
+                  </div>
+                  <div className="k-card">
+                    <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Debtors</p>
+                    <p className="text-2xl font-800 text-text-primary tracking-tight">
+                      {debtorTotals.debtor_count}
+                    </p>
+                  </div>
+                  <div className="k-card">
+                    <p className="text-xs font-600 text-text-faint uppercase tracking-wider mb-2">Overdue</p>
+                    <p className="text-2xl font-800 text-warning tracking-tight">
+                      {debtorTotals.overdue_count}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {debtorsLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-surface-border border-t-primary rounded-full animate-spin" />
+                </div>
+              ) : (
+                <div className="k-card p-0 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="k-table w-full">
+                      <thead>
+                        <tr>
+                          <th>Customer</th>
+                          <th>Phone</th>
+                          <th>Balance</th>
+                          <th>Credit Limit</th>
+                          <th>Available Credit</th>
+                          <th>Oldest Open Sale</th>
+                          <th>Due Date</th>
+                          <th>Last Payment</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {debtors.length === 0 ? (
+                          <tr><td colSpan={9} className="text-center py-8 text-text-faint">No outstanding balances</td></tr>
+                        ) : debtors.map((d) => (
+                          <tr key={d.customer_id}>
+                            <td className="font-500 text-text-primary">
+                              {d.full_name}
+                              {d.business_name && (
+                                <div className="text-xs text-text-faint">{d.business_name}</div>
+                              )}
+                            </td>
+                            <td className="text-xs">{d.phone || '—'}</td>
+                            <td className="text-danger font-600">{formatCurrency(d.current_balance)}</td>
+                            <td className="text-xs">{d.credit_limit != null ? formatCurrency(d.credit_limit) : '—'}</td>
+                            <td className="text-xs">
+                              {d.available_credit != null ? formatCurrency(d.available_credit) : '—'}
+                            </td>
+                            <td className="text-xs">
+                              {d.oldest_transaction_date ? formatDate(d.oldest_transaction_date) : '—'}
+                            </td>
+                            <td className="text-xs">
+                              {d.due_date ? formatDate(d.due_date) : '—'}
+                            </td>
+                            <td className="text-xs">
+                              {d.last_payment_date ? (
+                                <>
+                                  {formatDate(d.last_payment_date)}
+                                  <div className="text-text-faint">{formatCurrency(d.last_payment_amount)}</div>
+                                </>
+                              ) : '—'}
+                            </td>
+                            <td>
+                              {d.is_overdue ? (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-danger/10 text-danger">
+                                  Overdue {d.days_overdue}d
+                                </span>
+                              ) : (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-surface-border text-text-muted">
+                                  Current
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
