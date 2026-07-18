@@ -555,7 +555,7 @@ const Reports = () => {
                     </div>
                   )}
 
-                  {/* CHARTS ONLY - NO DUPLICATE TABLES */}
+                  {/* CHARTS - All bar charts now VERTICAL */}
                   {returnsSummary && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                       {/* Refund Method Pie Chart */}
@@ -592,7 +592,7 @@ const Reports = () => {
                         </div>
                       </div>
 
-                      {/* Top Returned Products Bar Chart */}
+                      {/* Top Returned Products - VERTICAL Bar Chart */}
                       <div className="k-card">
                         <div className="px-4 py-3 border-b border-surface-border">
                           <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Returned Products</p>
@@ -604,21 +604,20 @@ const Reports = () => {
                             <ResponsiveContainer width="100%" height={250}>
                               <BarChart
                                 data={getTopProductsChartData()}
-                                layout="vertical"
-                                margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 30 }}
                               >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                                <XAxis type="number" stroke="#9CA3AF" fontSize={11} />
-                                <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={50} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} angle={-15} textAnchor="end" height={60} />
+                                <YAxis stroke="#9CA3AF" fontSize={11} />
                                 <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="refunded" fill="#EF4444" radius={[0, 4, 4, 0]} />
+                                <Bar dataKey="refunded" fill="#EF4444" radius={[4, 4, 0, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           )}
                         </div>
                       </div>
 
-                      {/* Top Reasons Bar Chart */}
+                      {/* Top Reasons - VERTICAL Bar Chart */}
                       <div className="k-card">
                         <div className="px-4 py-3 border-b border-surface-border">
                           <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Top Reasons</p>
@@ -630,21 +629,20 @@ const Reports = () => {
                             <ResponsiveContainer width="100%" height={250}>
                               <BarChart
                                 data={getTopReasonsChartData()}
-                                layout="vertical"
-                                margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 30 }}
                               >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                                <XAxis type="number" stroke="#9CA3AF" fontSize={11} />
-                                <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={50} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} angle={-15} textAnchor="end" height={60} />
+                                <YAxis stroke="#9CA3AF" fontSize={11} />
                                 <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="amount" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                                <Bar dataKey="amount" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           )}
                         </div>
                       </div>
 
-                      {/* Returns by Cashier Bar Chart */}
+                      {/* Returns by Cashier - VERTICAL Bar Chart */}
                       <div className="k-card">
                         <div className="px-4 py-3 border-b border-surface-border">
                           <p className="text-xs font-600 text-text-primary uppercase tracking-wider">Returns by Cashier</p>
@@ -656,14 +654,13 @@ const Reports = () => {
                             <ResponsiveContainer width="100%" height={250}>
                               <BarChart
                                 data={getCashierChartData()}
-                                layout="vertical"
-                                margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 30 }}
                               >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                                <XAxis type="number" stroke="#9CA3AF" fontSize={11} />
-                                <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={10} width={50} />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} />
+                                <YAxis stroke="#9CA3AF" fontSize={11} />
                                 <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="amount" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                                <Bar dataKey="amount" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                               </BarChart>
                             </ResponsiveContainer>
                           )}
