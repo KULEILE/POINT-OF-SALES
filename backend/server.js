@@ -56,7 +56,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
   exposedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400  // Cache preflight for 24 hours (helps Chrome)
+  maxAge: 86400
 }));
 
 // ============================================================
@@ -82,11 +82,14 @@ app.use((req, res, next) => {
 
 app.get('/api/health', async (req, res) => {
   try {
-    await pool.query('SELECT 1');
+    // Simple query to verify database connection
+    const result = await pool.query('SELECT NOW() as server_time, current_database() as database_name');
     res.json({
       success: true,
       message: 'K-POINT OF SALES API running',
       db: 'connected',
+      database: result.rows[0].database_name,
+      server_time: result.rows[0].server_time,
       time: new Date(),
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development'
@@ -187,16 +190,45 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+// For Railway, bind to 0.0.0.0
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('\x1b[34m========================================\x1b[0m');
   console.log('\x1b[34m  K-POINT OF SALES API\x1b[0m');
   console.log('\x1b[34m========================================\x1b[0m');
   console.log(`\x1b[32m Port    :\x1b[0m ${PORT}`);
-  console.log(`\x1b[32m API     :\x1b[0m http://localhost:${PORT}/api`);
-  console.log(`\x1b[32m Health  :\x1b[0m http://localhost:${PORT}/api/health`);
-  console.log(`\x1b[32m Root    :\x1b[0m http://localhost:${PORT}/`);
+  console.log(`\x1b[32m API     :\x1b[0m http://0.0.0.0:${PORT}/api`);
+  console.log(`\x1b[32m Health  :\x1b[0m http://0.0.0.0:${PORT}/api/health`);
+  console.log(`\x1b[32m Root    :\x1b[0m http://0.0.0.0:${PORT}/`);
   console.log(`\x1b[32m CORS    :\x1b[0m Allowed origins: ${allowedOrigins.join(', ')}`);
   console.log('\x1b[34m========================================\x1b[0m');
+});
+
+// ============================================================
+// GRACEFUL SHUTDOWN
+// ============================================================
+
+// Handle SIGTERM (Railway sends this on restart)
+process.on('SIGTERM', () => {
+  console.log('[Server] SIGTERM received, closing gracefully...');
+  server.close(() => {
+    console.log('[Server] Server closed');
+    pool.end(() => {
+      console.log('[DB] Pool closed');
+      process.exit(0);
+    });
+  });
+});
+
+// Handle SIGINT (Ctrl+C)
+process.on('SIGINT', () => {
+  console.log('[Server] SIGINT received, closing gracefully...');
+  server.close(() => {
+    console.log('[Server] Server closed');
+    pool.end(() => {
+      console.log('[DB] Pool closed');
+      process.exit(0);
+    });
+  });
 });
 
 // ============================================================
